@@ -30,8 +30,8 @@ func TestNewCircuitBreaker(t *testing.T) {
 		t.Errorf("Expected SuccessThreshold=2, got %d", cb.config.SuccessThreshold)
 	}
 
-	if cb.state != StateClosed {
-		t.Errorf("Expected initial state=Closed, got %v", cb.state)
+	if CircuitState(cb.state) != StateClosed {
+		t.Errorf("Expected initial state=Closed, got %v", CircuitState(cb.state))
 	}
 }
 
@@ -59,8 +59,8 @@ func TestCircuitBreakerAllowClosed(t *testing.T) {
 		t.Error("Expected true when circuit breaker is closed")
 	}
 
-	if cb.state != StateClosed {
-		t.Errorf("Expected state=Closed, got %v", cb.state)
+	if CircuitState(cb.state) != StateClosed {
+		t.Errorf("Expected state=Closed, got %v", CircuitState(cb.state))
 	}
 }
 
@@ -74,8 +74,8 @@ func TestCircuitBreakerAllowOpen(t *testing.T) {
 	cb.RecordFailure()
 	cb.RecordFailure()
 
-	if cb.state != StateOpen {
-		t.Errorf("Expected state=Open after failures, got %v", cb.state)
+	if CircuitState(cb.state) != StateOpen {
+		t.Errorf("Expected state=Open after failures, got %v", CircuitState(cb.state))
 	}
 
 	// Should not allow requests when open
@@ -103,7 +103,7 @@ func TestCircuitBreakerAllowHalfOpen(t *testing.T) {
 		t.Error("Expected true when transitioning to half-open")
 	}
 
-	if cb.state != StateHalfOpen {
+	if CircuitState(cb.state) != StateHalfOpen {
 		t.Errorf("Expected state=HalfOpen, got %v", cb.state)
 	}
 }
@@ -118,7 +118,7 @@ func TestCircuitBreakerRecordFailure(t *testing.T) {
 	if cb.failures != 1 {
 		t.Errorf("Expected failures=1, got %d", cb.failures)
 	}
-	if cb.state != StateClosed {
+	if CircuitState(cb.state) != StateClosed {
 		t.Errorf("Expected state=Closed after 1 failure, got %v", cb.state)
 	}
 
@@ -126,7 +126,7 @@ func TestCircuitBreakerRecordFailure(t *testing.T) {
 	if cb.failures != 2 {
 		t.Errorf("Expected failures=2, got %d", cb.failures)
 	}
-	if cb.state != StateClosed {
+	if CircuitState(cb.state) != StateClosed {
 		t.Errorf("Expected state=Closed after 2 failures, got %v", cb.state)
 	}
 
@@ -135,7 +135,7 @@ func TestCircuitBreakerRecordFailure(t *testing.T) {
 	if cb.failures != 3 {
 		t.Errorf("Expected failures=3, got %d", cb.failures)
 	}
-	if cb.state != StateOpen {
+	if CircuitState(cb.state) != StateOpen {
 		t.Errorf("Expected state=Open after 3 failures, got %v", cb.state)
 	}
 
@@ -157,7 +157,7 @@ func TestCircuitBreakerRecordSuccess(t *testing.T) {
 	cb.RecordFailure()
 	cb.RecordFailure()
 
-	if cb.state != StateOpen {
+	if CircuitState(cb.state) != StateOpen {
 		t.Errorf("Expected state=Open, got %v", cb.state)
 	}
 
@@ -169,7 +169,7 @@ func TestCircuitBreakerRecordSuccess(t *testing.T) {
 		t.Error("Expected true when transitioning to half-open")
 	}
 
-	if cb.state != StateHalfOpen {
+	if CircuitState(cb.state) != StateHalfOpen {
 		t.Errorf("Expected state=HalfOpen, got %v", cb.state)
 	}
 
@@ -178,7 +178,7 @@ func TestCircuitBreakerRecordSuccess(t *testing.T) {
 	if cb.successes != 1 {
 		t.Errorf("Expected successes=1, got %d", cb.successes)
 	}
-	if cb.state != StateHalfOpen {
+	if CircuitState(cb.state) != StateHalfOpen {
 		t.Errorf("Expected state=HalfOpen after 1 success, got %v", cb.state)
 	}
 
@@ -187,7 +187,7 @@ func TestCircuitBreakerRecordSuccess(t *testing.T) {
 	if cb.successes != 0 {
 		t.Errorf("Expected successes=0 (reset after closing), got %d", cb.successes)
 	}
-	if cb.state != StateClosed {
+	if CircuitState(cb.state) != StateClosed {
 		t.Errorf("Expected state=Closed after 2 successes, got %v", cb.state)
 	}
 
@@ -220,7 +220,7 @@ func TestCircuitBreakerRecoveryTimeout(t *testing.T) {
 		t.Error("Expected true after recovery timeout")
 	}
 
-	if cb.state != StateHalfOpen {
+	if CircuitState(cb.state) != StateHalfOpen {
 		t.Errorf("Expected state=HalfOpen, got %v", cb.state)
 	}
 }
@@ -233,27 +233,27 @@ func TestCircuitBreakerStateTransitions(t *testing.T) {
 	})
 
 	// Start closed
-	if cb.state != StateClosed {
+	if CircuitState(cb.state) != StateClosed {
 		t.Errorf("Expected initial state=Closed, got %v", cb.state)
 	}
 
 	// Transition to open
 	cb.RecordFailure()
 	cb.RecordFailure()
-	if cb.state != StateOpen {
+	if CircuitState(cb.state) != StateOpen {
 		t.Errorf("Expected state=Open after failures, got %v", cb.state)
 	}
 
 	// Wait and transition to half-open
 	time.Sleep(60 * time.Millisecond)
 	cb.Allow()
-	if cb.state != StateHalfOpen {
+	if CircuitState(cb.state) != StateHalfOpen {
 		t.Errorf("Expected state=HalfOpen, got %v", cb.state)
 	}
 
 	// Transition back to closed
 	cb.RecordSuccess()
-	if cb.state != StateClosed {
+	if CircuitState(cb.state) != StateClosed {
 		t.Errorf("Expected state=Closed after success, got %v", cb.state)
 	}
 }
@@ -273,7 +273,7 @@ func TestCircuitBreakerHalfOpenFailure(t *testing.T) {
 	time.Sleep(60 * time.Millisecond)
 	cb.Allow()
 
-	if cb.state != StateHalfOpen {
+	if CircuitState(cb.state) != StateHalfOpen {
 		t.Errorf("Expected state=HalfOpen, got %v", cb.state)
 	}
 
@@ -281,7 +281,7 @@ func TestCircuitBreakerHalfOpenFailure(t *testing.T) {
 	cb.RecordFailure()
 
 	// Should transition back to open
-	if cb.state != StateOpen {
+	if CircuitState(cb.state) != StateOpen {
 		t.Errorf("Expected state=Open after failure in half-open, got %v", cb.state)
 	}
 
@@ -321,7 +321,7 @@ func TestCircuitBreakerConcurrentAccess(t *testing.T) {
 	}
 
 	// Circuit breaker should still be in a valid state
-	if cb.state != StateClosed && cb.state != StateOpen && cb.state != StateHalfOpen {
+	if CircuitState(cb.state) != StateClosed && CircuitState(cb.state) != StateOpen && CircuitState(cb.state) != StateHalfOpen {
 		t.Errorf("Invalid circuit breaker state after concurrent access: %v", cb.state)
 	}
 }
@@ -338,7 +338,7 @@ func TestCircuitBreakerWithZeroConfig(t *testing.T) {
 	cb.RecordFailure()
 	cb.RecordSuccess()
 
-	if cb.state != StateClosed {
+	if CircuitState(cb.state) != StateClosed {
 		t.Errorf("Expected state=Closed with defaults, got %v", cb.state)
 	}
 }
@@ -365,7 +365,7 @@ func TestCircuitBreakerStateString(t *testing.T) {
 	cb.RecordFailure()
 	cb.RecordFailure() // Should open
 
-	if cb.state != StateOpen {
+	if CircuitState(cb.state) != StateOpen {
 		t.Errorf("Expected state=1 (Open), got %d", cb.state)
 	}
 }

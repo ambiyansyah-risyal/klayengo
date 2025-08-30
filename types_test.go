@@ -105,7 +105,7 @@ func TestRateLimiterFields(t *testing.T) {
 		tokens:     10,
 		maxTokens:  10,
 		refillRate: 1 * time.Second,
-		lastRefill: time.Now(),
+		lastRefill: time.Now().UnixNano(),
 	}
 
 	if rl.tokens != 10 {
@@ -120,7 +120,7 @@ func TestRateLimiterFields(t *testing.T) {
 		t.Errorf("Expected refillRate=1s, got %v", rl.refillRate)
 	}
 
-	if rl.lastRefill.After(time.Now()) {
+	if time.Unix(0, rl.lastRefill).After(time.Now()) {
 		t.Error("lastRefill should not be in the future")
 	}
 }

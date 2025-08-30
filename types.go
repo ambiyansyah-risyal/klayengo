@@ -3,7 +3,6 @@ package klayengo
 import (
 	"fmt"
 	"net/http"
-	"sync"
 	"time"
 )
 
@@ -25,13 +24,13 @@ type CircuitBreakerConfig struct {
 	SuccessThreshold int
 }
 
-// CircuitBreaker represents a circuit breaker
+// CircuitBreaker represents a circuit breaker with atomic operations
 type CircuitBreaker struct {
 	config      CircuitBreakerConfig
-	state       CircuitState
-	failures    int
-	lastFailure time.Time
-	successes   int
+	state       int64 // CircuitState as int64 for atomic operations
+	failures    int64
+	lastFailure int64 // Unix nano timestamp
+	successes   int64
 }
 
 // CircuitState represents the state of the circuit breaker
@@ -105,13 +104,12 @@ const (
 	ErrorTypeValidation  = "ValidationError"
 )
 
-// RateLimiter represents a simple rate limiter
+// RateLimiter represents a simple rate limiter with atomic operations
 type RateLimiter struct {
-	mu         sync.Mutex
-	tokens     int
-	maxTokens  int
+	tokens     int64
+	maxTokens  int64
 	refillRate time.Duration
-	lastRefill time.Time
+	lastRefill int64 // Unix nano timestamp
 }
 
 // Option represents a configuration option

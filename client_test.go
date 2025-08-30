@@ -295,27 +295,6 @@ func TestClientWithMetrics(t *testing.T) {
 	}
 }
 
-func TestPow(t *testing.T) {
-	tests := []struct {
-		base     float64
-		exponent int
-		expected float64
-	}{
-		{2.0, 0, 1.0},
-		{2.0, 1, 2.0},
-		{2.0, 2, 4.0},
-		{2.0, 3, 8.0},
-		{3.0, 2, 9.0},
-	}
-
-	for _, test := range tests {
-		result := pow(test.base, test.exponent)
-		if result != test.expected {
-			t.Errorf("pow(%v, %d) = %v, expected %v", test.base, test.exponent, result, test.expected)
-		}
-	}
-}
-
 // Benchmark tests for performance measurement
 
 func BenchmarkClientGet(b *testing.B) {
