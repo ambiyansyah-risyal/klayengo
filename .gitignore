@@ -77,3 +77,7 @@ CLAUDE.md
 .cursor/rules/**
 .windsurf/rules/**
 .clinerules/**
+
+
+#Ignore vscode AI rules
+.github/instructions/codacy.instructions.md

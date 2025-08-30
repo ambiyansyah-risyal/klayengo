@@ -351,7 +351,8 @@ func (c *Client) createClientError(errorType, message string, cause error, reque
 	// Try to get status code from cause if it's an HTTP error
 	if cause != nil {
 		if httpErr, ok := cause.(*url.Error); ok && httpErr.Err != nil {
-			// Could be a more specific error type
+			// Could be a more specific error type - handled in error creation below
+			_ = httpErr // Avoid unused variable warning
 		}
 	}
 

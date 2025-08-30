@@ -211,7 +211,8 @@ func TestClientErrorChain(t *testing.T) {
 	}
 
 	if rootCause != errors.New("root cause") {
-		// This is just to use rootCause to avoid unused variable warning
+		// This comparison is just to use rootCause to avoid unused variable warning
+		_ = rootCause
 	}
 }
 

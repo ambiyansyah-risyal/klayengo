@@ -12,6 +12,8 @@ import (
 	"time"
 )
 
+const writeResponseErrorMsg = "Failed to write response: %v"
+
 func TestNewInMemoryCache(t *testing.T) {
 	cache := NewInMemoryCache()
 
@@ -338,7 +340,10 @@ func TestCachingInDo(t *testing.T) {
 		callCount++
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"data": "test"}`))
+
+		if _, err := w.Write([]byte(`{"data": "test"}`)); err != nil {
+			t.Fatalf(writeResponseErrorMsg, err)
+		}
 	}))
 	defer server.Close()
 
@@ -382,7 +387,9 @@ func TestCacheWithCustomKeyFunc(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		callCount++
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("response"))
+		if _, err := w.Write([]byte("response")); err != nil {
+			t.Fatalf(writeResponseErrorMsg, err)
+		}
 	}))
 	defer server.Close()
 
@@ -423,7 +430,9 @@ func TestCacheWithCustomCondition(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		callCount++
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("response"))
+		if _, err := w.Write([]byte("response")); err != nil {
+			t.Fatalf("Failed to write response: %v", err)
+		}
 	}))
 	defer server.Close()
 
