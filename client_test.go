@@ -441,7 +441,7 @@ func BenchmarkClientWithRateLimiter(b *testing.B) {
 	}))
 	defer server.Close()
 
-	client := New(WithRateLimiter(10000, 1*time.Second)) // Very high limit to avoid blocking
+	client := New(WithRateLimiter(100000, 1*time.Second)) // Very high limit to avoid blocking
 
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {

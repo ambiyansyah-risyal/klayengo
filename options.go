@@ -138,3 +138,48 @@ func WithMetricsCollector(collector *MetricsCollector) Option {
 		c.metrics = collector
 	}
 }
+
+// WithDebug enables debug logging with default configuration
+func WithDebug() Option {
+	return func(c *Client) {
+		if c.debug == nil {
+			c.debug = DefaultDebugConfig()
+		}
+		c.debug.Enabled = true
+	}
+}
+
+// WithDebugConfig sets custom debug configuration
+func WithDebugConfig(config *DebugConfig) Option {
+	return func(c *Client) {
+		c.debug = config
+	}
+}
+
+// WithLogger sets a custom logger for debug output
+func WithLogger(logger Logger) Option {
+	return func(c *Client) {
+		c.logger = logger
+	}
+}
+
+// WithSimpleLogger enables debug logging with a simple console logger
+func WithSimpleLogger() Option {
+	return func(c *Client) {
+		if c.debug == nil {
+			c.debug = DefaultDebugConfig()
+		}
+		c.debug.Enabled = true
+		c.logger = NewSimpleLogger()
+	}
+}
+
+// WithRequestIDGenerator sets a custom function for generating request IDs
+func WithRequestIDGenerator(gen func() string) Option {
+	return func(c *Client) {
+		if c.debug == nil {
+			c.debug = DefaultDebugConfig()
+		}
+		c.debug.RequestIDGen = gen
+	}
+}

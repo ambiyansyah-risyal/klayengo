@@ -5,6 +5,7 @@ import (
 	"io"
 	"math/rand"
 	"net/http"
+	"net/url"
 	"time"
 )
 
@@ -26,6 +27,8 @@ type Client struct {
 	cacheKeyFunc      func(*http.Request) string
 	cacheCondition    CacheCondition
 	metrics           *MetricsCollector
+	debug             *DebugConfig
+	logger            Logger
 }
 
 // New creates a new retry client with default options
@@ -49,6 +52,8 @@ func New(options ...Option) *Client {
 		cacheKeyFunc:      DefaultCacheKeyFunc,
 		cacheCondition:    DefaultCacheCondition,
 		metrics:           nil, // No metrics by default
+		debug:             DefaultDebugConfig(),
+		logger:            nil, // No logging by default
 	}
 
 	for _, option := range options {
@@ -82,6 +87,17 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	start := time.Now()
 	endpoint := getEndpointFromRequest(req)
 
+	// Generate request ID for tracing
+	requestID := ""
+	if c.debug != nil && c.debug.RequestIDGen != nil {
+		requestID = c.debug.RequestIDGen()
+	}
+
+	// Debug logging
+	if c.debug != nil && c.debug.Enabled && c.debug.LogRequests && c.logger != nil {
+		c.logger.Debug("Starting request", "requestID", requestID, "method", req.Method, "url", req.URL.String(), "endpoint", endpoint)
+	}
+
 	// Record request start
 	c.metrics.RecordRequestStart(req.Method, endpoint)
 
@@ -92,6 +108,11 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	if cacheEnabled {
 		cacheKey := c.cacheKeyFunc(req)
 		if entry, found := c.cache.Get(cacheKey); found {
+			// Debug logging
+			if c.debug != nil && c.debug.Enabled && c.debug.LogCache && c.logger != nil {
+				c.logger.Debug("Cache hit", "requestID", requestID, "cacheKey", cacheKey)
+			}
+
 			// Record cache hit
 			c.metrics.RecordCacheHit(req.Method, endpoint)
 
@@ -105,9 +126,15 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 		}
 		// Record cache miss
 		c.metrics.RecordCacheMiss(req.Method, endpoint)
+
+		// Debug logging
+		if c.debug != nil && c.debug.Enabled && c.debug.LogCache && c.logger != nil {
+			cacheKey := c.cacheKeyFunc(req)
+			c.logger.Debug("Cache miss", "requestID", requestID, "cacheKey", cacheKey)
+		}
 	}
 
-	resp, err := c.doWithRetry(req, 0)
+	resp, err := c.doWithRetry(req, 0, requestID, start)
 
 	// Record request end
 	c.metrics.RecordRequestEnd(req.Method, endpoint)
@@ -131,19 +158,29 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 		if inMemoryCache, ok := c.cache.(*InMemoryCache); ok {
 			c.metrics.RecordCacheSize("default", len(inMemoryCache.store))
 		}
+
+		// Debug logging
+		if c.debug != nil && c.debug.Enabled && c.debug.LogCache && c.logger != nil {
+			c.logger.Debug("Response cached", "requestID", requestID, "cacheKey", cacheKey, "ttl", ttl)
+		}
 	}
 
 	return resp, err
 }
 
 // doWithRetry executes the request with retry logic
-func (c *Client) doWithRetry(req *http.Request, attempt int) (*http.Response, error) {
+func (c *Client) doWithRetry(req *http.Request, attempt int, requestID string, startTime time.Time) (*http.Response, error) {
 	endpoint := getEndpointFromRequest(req)
 
 	// Check rate limiter
 	if c.rateLimiter != nil && !c.rateLimiter.Allow() {
+		// Debug logging
+		if c.debug != nil && c.debug.Enabled && c.debug.LogRateLimit && c.logger != nil {
+			c.logger.Warn("Rate limit exceeded", "requestID", requestID, "endpoint", endpoint)
+		}
+
 		c.metrics.RecordError("RateLimit", req.Method, endpoint)
-		return nil, &ClientError{Type: "RateLimit", Message: "rate limit exceeded"}
+		return nil, c.createClientError(ErrorTypeRateLimit, "rate limit exceeded", nil, requestID, req, attempt, time.Since(startTime))
 	}
 
 	// Record rate limiter tokens if rate limiter is enabled
@@ -153,12 +190,22 @@ func (c *Client) doWithRetry(req *http.Request, attempt int) (*http.Response, er
 
 	// Check circuit breaker
 	if !c.circuitBreaker.Allow() {
+		// Debug logging
+		if c.debug != nil && c.debug.Enabled && c.debug.LogCircuit && c.logger != nil {
+			c.logger.Warn("Circuit breaker open", "requestID", requestID, "endpoint", endpoint, "state", c.circuitBreaker.state)
+		}
+
 		c.metrics.RecordError("CircuitBreaker", req.Method, endpoint)
-		return nil, &ClientError{Type: "CircuitBreaker", Message: "circuit breaker is open"}
+		return nil, c.createClientError(ErrorTypeCircuitOpen, "circuit breaker is open", nil, requestID, req, attempt, time.Since(startTime))
 	}
 
 	// Record retry attempt if not the first attempt
 	if attempt > 0 {
+		// Debug logging
+		if c.debug != nil && c.debug.Enabled && c.debug.LogRetries && c.logger != nil {
+			c.logger.Info("Retry attempt", "requestID", requestID, "attempt", attempt, "maxRetries", c.maxRetries, "endpoint", endpoint)
+		}
+
 		c.metrics.RecordRetry(req.Method, endpoint, attempt)
 	}
 
@@ -169,6 +216,16 @@ func (c *Client) doWithRetry(req *http.Request, attempt int) (*http.Response, er
 	if err != nil || (resp != nil && resp.StatusCode >= 500) {
 		c.circuitBreaker.RecordFailure()
 		c.metrics.RecordCircuitBreakerState("default", c.circuitBreaker.state)
+
+		// Debug logging
+		if c.debug != nil && c.debug.Enabled && c.debug.LogCircuit && c.logger != nil {
+			if err != nil {
+				c.logger.Warn("Circuit breaker failure recorded", "requestID", requestID, "error", err.Error())
+			} else {
+				c.logger.Warn("Circuit breaker failure recorded", "requestID", requestID, "statusCode", resp.StatusCode)
+			}
+		}
+
 		if err != nil {
 			c.metrics.RecordError("Network", req.Method, endpoint)
 		} else {
@@ -182,8 +239,19 @@ func (c *Client) doWithRetry(req *http.Request, attempt int) (*http.Response, er
 	// Check if retry is needed
 	if attempt < c.maxRetries && c.retryCondition(resp, err) {
 		backoff := c.calculateBackoff(attempt)
+
+		// Debug logging
+		if c.debug != nil && c.debug.Enabled && c.debug.LogRetries && c.logger != nil {
+			c.logger.Info("Scheduling retry", "requestID", requestID, "attempt", attempt+1, "backoff", backoff, "endpoint", endpoint)
+		}
+
 		time.Sleep(backoff)
-		return c.doWithRetry(req, attempt+1)
+		return c.doWithRetry(req, attempt+1, requestID, startTime)
+	}
+
+	// If there's an error, wrap it with enhanced context
+	if err != nil {
+		return nil, c.createClientError(ErrorTypeNetwork, "network request failed", err, requestID, req, attempt, time.Since(startTime))
 	}
 
 	return resp, err
@@ -239,6 +307,34 @@ func DefaultRetryCondition(resp *http.Response, err error) bool {
 		return true
 	}
 	return resp.StatusCode >= 500
+}
+
+// createClientError creates a ClientError with enhanced context
+func (c *Client) createClientError(errorType, message string, cause error, requestID string, req *http.Request, attempt int, duration time.Duration) *ClientError {
+	endpoint := getEndpointFromRequest(req)
+	statusCode := 0
+
+	// Try to get status code from cause if it's an HTTP error
+	if cause != nil {
+		if httpErr, ok := cause.(*url.Error); ok && httpErr.Err != nil {
+			// Could be a more specific error type
+		}
+	}
+
+	return &ClientError{
+		Type:       errorType,
+		Message:    message,
+		Cause:      cause,
+		RequestID:  requestID,
+		Method:     req.Method,
+		URL:        req.URL.String(),
+		Attempt:    attempt,
+		MaxRetries: c.maxRetries,
+		Timestamp:  time.Now(),
+		Duration:   duration,
+		StatusCode: statusCode,
+		Endpoint:   endpoint,
+	}
 }
 
 // getEndpointFromRequest extracts a simplified endpoint from the request for metrics

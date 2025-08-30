@@ -284,7 +284,7 @@ resp, err := client.Get(ctx, "https://api.example.com/slow-endpoint")
 
 ## Error Handling
 
-Klayengo provides structured error handling with specific error types:
+Klayengo provides structured error handling with specific error types and enhanced debugging information:
 
 ```go
 import (
@@ -302,16 +302,131 @@ if err != nil {
     var clientErr *klayengo.ClientError
     if errors.As(err, &clientErr) {
         switch clientErr.Type {
-        case "RateLimit":
+        case klayengo.ErrorTypeRateLimit:
             // Handle rate limit exceeded
-        case "CircuitBreaker":
+            fmt.Printf("Rate limited: %s\n", clientErr.Message)
+        case klayengo.ErrorTypeCircuitOpen:
             // Handle circuit breaker open
+            fmt.Printf("Circuit breaker open: %s\n", clientErr.Message)
+        case klayengo.ErrorTypeNetwork:
+            // Handle network errors
+            fmt.Printf("Network error: %s\n", clientErr.Message)
         default:
             // Handle other errors
+            fmt.Printf("Error: %s\n", clientErr.Message)
         }
+
+        // Get detailed debugging information
+        if clientErr.RequestID != "" {
+            fmt.Printf("Request ID: %s\n", clientErr.RequestID)
+        }
+        fmt.Printf("Debug Info:\n%s\n", clientErr.DebugInfo())
     }
 }
 ```
+
+### Error Types
+
+Klayengo defines specific error types for better error categorization:
+
+- `ErrorTypeNetwork` - Network-related errors (connection failures, DNS issues, etc.)
+- `ErrorTypeTimeout` - Request timeout errors
+- `ErrorTypeRateLimit` - Rate limiting errors
+- `ErrorTypeCircuitOpen` - Circuit breaker open errors
+- `ErrorTypeServer` - Server-side errors (5xx status codes)
+- `ErrorTypeClient` - Client-side errors (4xx status codes)
+- `ErrorTypeCache` - Cache-related errors
+- `ErrorTypeConfig` - Configuration errors
+- `ErrorTypeValidation` - Input validation errors
+
+### Enhanced Error Context
+
+ClientError now includes rich context information:
+
+- **RequestID**: Unique identifier for request tracing
+- **Method**: HTTP method used
+- **URL**: Request URL
+- **Attempt**: Current retry attempt (0-based)
+- **MaxRetries**: Maximum configured retries
+- **Timestamp**: When the error occurred
+- **Duration**: How long the request took
+- **StatusCode**: HTTP status code (if applicable)
+- **Endpoint**: Simplified endpoint for logging
+- **Cause**: Underlying error that caused this error
+
+## Debugging
+
+Klayengo provides comprehensive debugging capabilities to help troubleshoot issues:
+
+### Debug Logging
+
+Enable debug logging to see detailed information about request processing:
+
+```go
+// Enable debug logging with simple console logger
+client := klayengo.New(
+    klayengo.WithSimpleLogger(),
+)
+
+// Or use a custom logger
+client := klayengo.New(
+    klayengo.WithLogger(customLogger),
+)
+
+// Configure debug options
+client := klayengo.New(
+    klayengo.WithDebugConfig(&klayengo.DebugConfig{
+        Enabled:      true,
+        LogRequests:  true,
+        LogRetries:   true,
+        LogCache:     false,
+        LogRateLimit: true,
+        LogCircuit:   true,
+    }),
+)
+```
+
+### Debug Configuration Options
+
+- `LogRequests`: Log all HTTP requests
+- `LogRetries`: Log retry attempts
+- `LogCache`: Log cache operations
+- `LogRateLimit`: Log rate limiting events
+- `LogCircuit`: Log circuit breaker state changes
+
+### Request Tracing
+
+Each request gets a unique ID for tracing through the system:
+
+```go
+// Custom request ID generator
+client := klayengo.New(
+    klayengo.WithRequestIDGenerator(func() string {
+        return fmt.Sprintf("myapp_%d", time.Now().UnixNano())
+    }),
+)
+```
+
+### Debug Information
+
+Use the `DebugInfo()` method to get comprehensive debugging information:
+
+```go
+if err != nil {
+    var clientErr *klayengo.ClientError
+    if errors.As(err, &clientErr) {
+        fmt.Println(clientErr.DebugInfo())
+    }
+}
+```
+
+This provides detailed information including:
+- Error type and message
+- Request details (ID, method, URL, endpoint)
+- Timing information (timestamp, duration)
+- Retry information (attempt count, max retries)
+- HTTP status code
+- Underlying cause
 
 ## Caching
 
@@ -377,6 +492,11 @@ client := klayengo.New(
 - `WithHTTPClient(client *http.Client)` - Custom HTTP client
 - `WithMetrics()` - Enable Prometheus metrics collection
 - `WithMetricsCollector(collector *MetricsCollector)` - Use custom metrics collector
+- `WithDebug()` - Enable debug logging with default configuration
+- `WithDebugConfig(config *DebugConfig)` - Set custom debug configuration
+- `WithLogger(logger Logger)` - Set a custom logger for debug output
+- `WithSimpleLogger()` - Enable debug logging with a simple console logger
+- `WithRequestIDGenerator(gen func() string)` - Set a custom function for generating request IDs
 
 ### Context Helper Functions
 

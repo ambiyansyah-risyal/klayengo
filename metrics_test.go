@@ -11,10 +11,11 @@ import (
 )
 
 func TestNewMetricsCollector(t *testing.T) {
-	collector := NewMetricsCollector()
+	registry := prometheus.NewRegistry()
+	collector := NewMetricsCollectorWithRegistry(registry)
 
 	if collector == nil {
-		t.Fatal("NewMetricsCollector() returned nil")
+		t.Fatal("NewMetricsCollectorWithRegistry() returned nil")
 	}
 
 	if collector.requestsTotal == nil {
