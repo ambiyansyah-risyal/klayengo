@@ -11,7 +11,7 @@ import (
 )
 
 func main() {
-	// Create a retry client with custom configuration
+	// Create a retry client with enhanced error handling and debugging
 	client := klayengo.New(
 		klayengo.WithMaxRetries(3),
 		klayengo.WithInitialBackoff(200*time.Millisecond),
@@ -29,6 +29,7 @@ func main() {
 			RecoveryTimeout:  5 * time.Second,
 			SuccessThreshold: 1,
 		}),
+		klayengo.WithSimpleLogger(), // Enable debug logging
 		klayengo.WithMiddleware(loggingMiddleware),
 	)
 

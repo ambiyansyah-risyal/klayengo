@@ -12,6 +12,8 @@ import (
 	"time"
 )
 
+const writeResponseErrorMsg = "Failed to write response: %v"
+
 func TestNewInMemoryCache(t *testing.T) {
 	cache := NewInMemoryCache()
 
@@ -19,8 +21,12 @@ func TestNewInMemoryCache(t *testing.T) {
 		t.Fatal("NewInMemoryCache() returned nil")
 	}
 
-	if cache.store == nil {
-		t.Error("Cache store not initialized")
+	if cache.shards == nil {
+		t.Error("Cache shards not initialized")
+	}
+
+	if len(cache.shards) != cache.numShards {
+		t.Errorf("Expected %d shards, got %d", cache.numShards, len(cache.shards))
 	}
 }
 
@@ -86,11 +92,8 @@ func TestInMemoryCacheSet(t *testing.T) {
 
 	cache.Set("test-key", entry, 1*time.Hour)
 
-	if len(cache.store) != 1 {
-		t.Errorf("Expected cache size 1, got %d", len(cache.store))
-	}
-
-	stored, exists := cache.store["test-key"]
+	// Check if entry exists by trying to get it
+	stored, exists := cache.Get("test-key")
 	if !exists {
 		t.Error("Entry not stored in cache")
 	}
@@ -112,8 +115,10 @@ func TestInMemoryCacheDelete(t *testing.T) {
 	cache.Set("test-key", entry, 1*time.Hour)
 	cache.Delete("test-key")
 
-	if len(cache.store) != 0 {
-		t.Errorf("Expected cache size 0 after delete, got %d", len(cache.store))
+	// Check if entry was deleted
+	_, exists := cache.Get("test-key")
+	if exists {
+		t.Error("Entry should have been deleted")
 	}
 }
 
@@ -127,17 +132,25 @@ func TestInMemoryCacheClear(t *testing.T) {
 			StatusCode: 200,
 			Header:     make(http.Header),
 		}
-		cache.Set(string(rune('a'+i)), entry, 1*time.Hour)
+		cache.Set(fmt.Sprintf("key-%d", i), entry, 1*time.Hour)
 	}
 
-	if len(cache.store) != 5 {
-		t.Errorf("Expected cache size 5, got %d", len(cache.store))
+	// Verify entries exist
+	for i := 0; i < 5; i++ {
+		_, exists := cache.Get(fmt.Sprintf("key-%d", i))
+		if !exists {
+			t.Errorf("Entry %d should exist before clear", i)
+		}
 	}
 
 	cache.Clear()
 
-	if len(cache.store) != 0 {
-		t.Errorf("Expected cache size 0 after clear, got %d", len(cache.store))
+	// Verify all entries are cleared
+	for i := 0; i < 5; i++ {
+		_, exists := cache.Get(fmt.Sprintf("key-%d", i))
+		if exists {
+			t.Errorf("Entry %d should not exist after clear", i)
+		}
 	}
 }
 
@@ -327,7 +340,10 @@ func TestCachingInDo(t *testing.T) {
 		callCount++
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"data": "test"}`))
+
+		if _, err := w.Write([]byte(`{"data": "test"}`)); err != nil {
+			t.Fatalf(writeResponseErrorMsg, err)
+		}
 	}))
 	defer server.Close()
 
@@ -371,7 +387,9 @@ func TestCacheWithCustomKeyFunc(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		callCount++
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("response"))
+		if _, err := w.Write([]byte("response")); err != nil {
+			t.Fatalf(writeResponseErrorMsg, err)
+		}
 	}))
 	defer server.Close()
 
@@ -412,7 +430,9 @@ func TestCacheWithCustomCondition(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		callCount++
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("response"))
+		if _, err := w.Write([]byte("response")); err != nil {
+			t.Fatalf("Failed to write response: %v", err)
+		}
 	}))
 	defer server.Close()
 

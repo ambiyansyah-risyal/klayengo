@@ -11,6 +11,17 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
+const (
+	testResponseBody         = "test response"
+	cachedResponseBody       = "cached response"
+	successResponseBody      = "success"
+	fullFeaturedResponseBody = "full featured response"
+	contentTypeJSON          = "application/json"
+	expectedStatus200Msg     = "Expected status 200, got %d"
+	expectedContentTypeMsg   = "Expected Content-Type application/json, got %s"
+	failedWriteResponseMsg   = "Failed to write response: %v"
+)
+
 func TestNew(t *testing.T) {
 	client := New()
 
@@ -38,7 +49,9 @@ func TestGet(t *testing.T) {
 			t.Errorf("Expected GET method, got %s", r.Method)
 		}
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("test response"))
+		if _, err := w.Write([]byte(testResponseBody)); err != nil {
+			t.Fatalf(failedWriteResponseMsg, err)
+		}
 	}))
 	defer server.Close()
 
@@ -50,13 +63,15 @@ func TestGet(t *testing.T) {
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		t.Errorf("Expected status 200, got %d", resp.StatusCode)
+		t.Errorf(expectedStatus200Msg, resp.StatusCode)
 	}
 
-	body := make([]byte, 13)
-	resp.Body.Read(body)
-	if string(body) != "test response" {
-		t.Errorf("Expected 'test response', got '%s'", string(body))
+	body := make([]byte, len(testResponseBody))
+	if _, err := resp.Body.Read(body); err != nil && err.Error() != "EOF" {
+		t.Fatalf("Failed to read response body: %v", err)
+	}
+	if string(body) != testResponseBody {
+		t.Errorf("Expected '%s', got '%s'", testResponseBody, string(body))
 	}
 }
 
@@ -65,11 +80,13 @@ func TestPost(t *testing.T) {
 		if r.Method != "POST" {
 			t.Errorf("Expected POST method, got %s", r.Method)
 		}
-		if r.Header.Get("Content-Type") != "application/json" {
-			t.Errorf("Expected Content-Type application/json, got %s", r.Header.Get("Content-Type"))
+		if r.Header.Get("Content-Type") != contentTypeJSON {
+			t.Errorf(expectedContentTypeMsg, r.Header.Get("Content-Type"))
 		}
-		w.WriteHeader(http.StatusCreated)
-		w.Write([]byte("created"))
+		w.WriteHeader(http.StatusOK)
+		if _, err := w.Write([]byte(testResponseBody)); err != nil {
+			t.Fatalf(failedWriteResponseMsg, err)
+		}
 	}))
 	defer server.Close()
 
@@ -80,8 +97,8 @@ func TestPost(t *testing.T) {
 		t.Fatalf("Post() returned error: %v", err)
 	}
 
-	if resp.StatusCode != http.StatusCreated {
-		t.Errorf("Expected status 201, got %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf(expectedStatus200Msg, resp.StatusCode)
 	}
 }
 
@@ -111,7 +128,7 @@ func TestDoWithRetry(t *testing.T) {
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		t.Errorf("Expected status 200, got %d", resp.StatusCode)
+		t.Errorf(expectedStatus200Msg, resp.StatusCode)
 	}
 }
 
@@ -240,7 +257,7 @@ func TestExecuteMiddleware(t *testing.T) {
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		t.Errorf("Expected status 200, got %d", resp.StatusCode)
+		t.Errorf(expectedStatus200Msg, resp.StatusCode)
 	}
 
 	expectedOrder := []string{"middleware1", "middleware2", "handler"}
@@ -295,33 +312,14 @@ func TestClientWithMetrics(t *testing.T) {
 	}
 }
 
-func TestPow(t *testing.T) {
-	tests := []struct {
-		base     float64
-		exponent int
-		expected float64
-	}{
-		{2.0, 0, 1.0},
-		{2.0, 1, 2.0},
-		{2.0, 2, 4.0},
-		{2.0, 3, 8.0},
-		{3.0, 2, 9.0},
-	}
-
-	for _, test := range tests {
-		result := pow(test.base, test.exponent)
-		if result != test.expected {
-			t.Errorf("pow(%v, %d) = %v, expected %v", test.base, test.exponent, result, test.expected)
-		}
-	}
-}
-
 // Benchmark tests for performance measurement
 
 func BenchmarkClientGet(b *testing.B) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("test response"))
+		if _, err := w.Write([]byte(testResponseBody)); err != nil {
+			b.Fatalf(failedWriteResponseMsg, err)
+		}
 	}))
 	defer server.Close()
 
@@ -342,7 +340,9 @@ func BenchmarkClientGet(b *testing.B) {
 func BenchmarkClientPost(b *testing.B) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("test response"))
+		if _, err := w.Write([]byte(testResponseBody)); err != nil {
+			b.Fatalf(failedWriteResponseMsg, err)
+		}
 	}))
 	defer server.Close()
 
@@ -369,7 +369,9 @@ func BenchmarkClientWithRetries(b *testing.B) {
 			return
 		}
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("success"))
+		if _, err := w.Write([]byte(successResponseBody)); err != nil {
+			b.Fatalf(failedWriteResponseMsg, err)
+		}
 	}))
 	defer server.Close()
 
@@ -394,7 +396,9 @@ func BenchmarkClientWithRetries(b *testing.B) {
 func BenchmarkClientWithCache(b *testing.B) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("cached response"))
+		if _, err := w.Write([]byte(cachedResponseBody)); err != nil {
+			b.Fatalf(failedWriteResponseMsg, err)
+		}
 	}))
 	defer server.Close()
 
@@ -413,7 +417,9 @@ func BenchmarkClientWithCache(b *testing.B) {
 func BenchmarkClientWithCircuitBreaker(b *testing.B) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("success"))
+		if _, err := w.Write([]byte(successResponseBody)); err != nil {
+			b.Fatalf(failedWriteResponseMsg, err)
+		}
 	}))
 	defer server.Close()
 
@@ -437,11 +443,13 @@ func BenchmarkClientWithCircuitBreaker(b *testing.B) {
 func BenchmarkClientWithRateLimiter(b *testing.B) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("success"))
+		if _, err := w.Write([]byte(successResponseBody)); err != nil {
+			b.Fatalf(failedWriteResponseMsg, err)
+		}
 	}))
 	defer server.Close()
 
-	client := New(WithRateLimiter(10000, 1*time.Second)) // Very high limit to avoid blocking
+	client := New(WithRateLimiter(100000, 1*time.Second)) // Very high limit to avoid blocking
 
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
@@ -458,7 +466,9 @@ func BenchmarkClientWithRateLimiter(b *testing.B) {
 func BenchmarkClientFullFeatures(b *testing.B) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("full featured response"))
+		if _, err := w.Write([]byte(fullFeaturedResponseBody)); err != nil {
+			b.Fatalf(failedWriteResponseMsg, err)
+		}
 	}))
 	defer server.Close()
 

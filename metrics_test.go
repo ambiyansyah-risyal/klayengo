@@ -10,11 +10,17 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
+const (
+	testEndpoint    = "test-endpoint"
+	testAPIEndpoint = "example.com/api"
+)
+
 func TestNewMetricsCollector(t *testing.T) {
-	collector := NewMetricsCollector()
+	registry := prometheus.NewRegistry()
+	collector := NewMetricsCollectorWithRegistry(registry)
 
 	if collector == nil {
-		t.Fatal("NewMetricsCollector() returned nil")
+		t.Fatal("NewMetricsCollectorWithRegistry() returned nil")
 	}
 
 	if collector.requestsTotal == nil {
@@ -76,7 +82,7 @@ func TestRecordRequest(t *testing.T) {
 	collector := NewMetricsCollectorWithRegistry(registry)
 
 	method := "GET"
-	endpoint := "example.com/api"
+	endpoint := testAPIEndpoint
 	statusCode := 200
 	duration := 150 * time.Millisecond
 
@@ -91,7 +97,7 @@ func TestRecordRequestStart(t *testing.T) {
 	collector := NewMetricsCollectorWithRegistry(registry)
 
 	method := "POST"
-	endpoint := "example.com/api"
+	endpoint := testAPIEndpoint
 
 	collector.RecordRequestStart(method, endpoint)
 
@@ -103,7 +109,7 @@ func TestRecordRequestEnd(t *testing.T) {
 	collector := NewMetricsCollectorWithRegistry(registry)
 
 	method := "PUT"
-	endpoint := "example.com/api"
+	endpoint := testAPIEndpoint
 
 	collector.RecordRequestEnd(method, endpoint)
 
@@ -115,7 +121,7 @@ func TestRecordRetry(t *testing.T) {
 	collector := NewMetricsCollectorWithRegistry(registry)
 
 	method := "GET"
-	endpoint := "example.com/api"
+	endpoint := testAPIEndpoint
 	attempt := 2
 
 	collector.RecordRetry(method, endpoint, attempt)
@@ -155,7 +161,7 @@ func TestRecordCacheHit(t *testing.T) {
 	collector := NewMetricsCollectorWithRegistry(registry)
 
 	method := "GET"
-	endpoint := "example.com/api"
+	endpoint := testAPIEndpoint
 
 	collector.RecordCacheHit(method, endpoint)
 
@@ -167,7 +173,7 @@ func TestRecordCacheMiss(t *testing.T) {
 	collector := NewMetricsCollectorWithRegistry(registry)
 
 	method := "POST"
-	endpoint := "example.com/api"
+	endpoint := testAPIEndpoint
 
 	collector.RecordCacheMiss(method, endpoint)
 
@@ -192,7 +198,7 @@ func TestRecordError(t *testing.T) {
 
 	errorType := "Network"
 	method := "GET"
-	endpoint := "example.com/api"
+	endpoint := testAPIEndpoint
 
 	collector.RecordError(errorType, method, endpoint)
 
@@ -229,7 +235,9 @@ func TestMetricsIntegration(t *testing.T) {
 	registry := prometheus.NewRegistry()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK"))
+		if _, err := w.Write([]byte("OK")); err != nil {
+			t.Fatalf("Failed to write response: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -300,7 +308,9 @@ func TestMetricsWithCache(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		callCount++
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("cached response"))
+		if _, err := w.Write([]byte("cached response")); err != nil {
+			t.Fatalf("Failed to write response: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -459,7 +469,7 @@ func TestMetricsErrorTypes(t *testing.T) {
 	}
 
 	for _, errorType := range errorTypes {
-		collector.RecordError(errorType, "GET", "test-endpoint")
+		collector.RecordError(errorType, "GET", testEndpoint)
 	}
 
 	// Verify no panics occurred
@@ -472,13 +482,13 @@ func TestMetricsHTTPMethods(t *testing.T) {
 	methods := []string{"GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"}
 
 	for _, method := range methods {
-		collector.RecordRequest(method, "test-endpoint", 200, time.Millisecond)
-		collector.RecordRequestStart(method, "test-endpoint")
-		collector.RecordRequestEnd(method, "test-endpoint")
-		collector.RecordRetry(method, "test-endpoint", 1)
-		collector.RecordCacheHit(method, "test-endpoint")
-		collector.RecordCacheMiss(method, "test-endpoint")
-		collector.RecordError("Test", method, "test-endpoint")
+		collector.RecordRequest(method, testEndpoint, 200, time.Millisecond)
+		collector.RecordRequestStart(method, testEndpoint)
+		collector.RecordRequestEnd(method, testEndpoint)
+		collector.RecordRetry(method, testEndpoint, 1)
+		collector.RecordCacheHit(method, testEndpoint)
+		collector.RecordCacheMiss(method, testEndpoint)
+		collector.RecordError("Test", method, testEndpoint)
 	}
 
 	// Verify no panics occurred
@@ -491,7 +501,7 @@ func TestMetricsStatusCodes(t *testing.T) {
 	statusCodes := []int{200, 201, 204, 301, 302, 400, 401, 403, 404, 422, 429, 500, 502, 503, 504}
 
 	for _, statusCode := range statusCodes {
-		collector.RecordRequest("GET", "test-endpoint", statusCode, time.Millisecond)
+		collector.RecordRequest("GET", testEndpoint, statusCode, time.Millisecond)
 	}
 
 	// Verify no panics occurred

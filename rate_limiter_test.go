@@ -293,7 +293,7 @@ func TestRateLimiterInitialization(t *testing.T) {
 	}
 
 	// Last refill should be recent
-	if time.Since(rl.lastRefill) > 10*time.Millisecond {
+	if time.Since(time.Unix(0, rl.lastRefill)) > 10*time.Millisecond {
 		t.Error("Last refill time not properly initialized")
 	}
 }
@@ -309,7 +309,7 @@ func TestRateLimiterTokenConsumption(t *testing.T) {
 			t.Errorf("Expected true for consumption %d", i+1)
 		}
 
-		expectedTokens := initialTokens - i - 1
+		expectedTokens := initialTokens - int64(i) - 1
 		if rl.tokens != expectedTokens {
 			t.Errorf("Expected tokens=%d after consumption %d, got %d",
 				expectedTokens, i+1, rl.tokens)
@@ -331,7 +331,7 @@ func TestRateLimiterRefillCalculation(t *testing.T) {
 	}
 
 	// Manually set last refill to past
-	rl.lastRefill = time.Now().Add(-250 * time.Millisecond) // 2.5 seconds ago
+	rl.lastRefill = time.Now().Add(-250 * time.Millisecond).UnixNano() // 2.5 seconds ago
 
 	// Next allow should trigger refill calculation
 	if !rl.Allow() {
@@ -339,7 +339,7 @@ func TestRateLimiterRefillCalculation(t *testing.T) {
 	}
 
 	// Should have refilled 2 tokens (2 * 100ms periods), then consumed 1
-	expectedTokens := 1
+	expectedTokens := int64(1)
 	if rl.tokens != expectedTokens {
 		t.Errorf("Expected tokens=%d after refill and consumption, got %d", expectedTokens, rl.tokens)
 	}

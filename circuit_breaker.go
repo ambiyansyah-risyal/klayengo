@@ -1,6 +1,9 @@
 package klayengo
 
-import "time"
+import (
+	"sync/atomic"
+	"time"
+)
 
 // NewCircuitBreaker creates a new circuit breaker
 func NewCircuitBreaker(config CircuitBreakerConfig) *CircuitBreaker {
@@ -15,23 +18,30 @@ func NewCircuitBreaker(config CircuitBreakerConfig) *CircuitBreaker {
 	}
 
 	return &CircuitBreaker{
-		config: config,
-		state:  StateClosed,
+		config:      config,
+		state:       int64(StateClosed),
+		failures:    0,
+		lastFailure: 0,
+		successes:   0,
 	}
 }
 
 // Allow checks if the request should be allowed through the circuit breaker
 func (cb *CircuitBreaker) Allow() bool {
-	now := time.Now()
+	now := time.Now().UnixNano()
+	state := CircuitState(atomic.LoadInt64(&cb.state))
 
-	switch cb.state {
+	switch state {
 	case StateClosed:
 		return true
 	case StateOpen:
-		if now.Sub(cb.lastFailure) >= cb.config.RecoveryTimeout {
-			cb.state = StateHalfOpen
-			cb.successes = 0
-			return true
+		lastFailure := atomic.LoadInt64(&cb.lastFailure)
+		if now-lastFailure >= int64(cb.config.RecoveryTimeout) {
+			// Try to transition to half-open
+			if atomic.CompareAndSwapInt64(&cb.state, int64(StateOpen), int64(StateHalfOpen)) {
+				atomic.StoreInt64(&cb.successes, 0)
+				return true
+			}
 		}
 		return false
 	case StateHalfOpen:
@@ -43,40 +53,42 @@ func (cb *CircuitBreaker) Allow() bool {
 
 // RecordFailure records a failure in the circuit breaker
 func (cb *CircuitBreaker) RecordFailure() {
-	now := time.Now()
+	now := time.Now().UnixNano()
+	atomic.StoreInt64(&cb.lastFailure, now)
 
-	switch cb.state {
+	state := CircuitState(atomic.LoadInt64(&cb.state))
+
+	switch state {
 	case StateClosed:
-		cb.failures++
-		cb.lastFailure = now
-		if cb.failures >= cb.config.FailureThreshold {
-			cb.state = StateOpen
+		failures := atomic.AddInt64(&cb.failures, 1)
+		if failures >= int64(cb.config.FailureThreshold) {
+			atomic.StoreInt64(&cb.state, int64(StateOpen))
 		}
 	case StateOpen:
-		// When open, update lastFailure but don't increment failures
-		cb.lastFailure = now
+		// When open, just update lastFailure
 	case StateHalfOpen:
 		// When half-open, a failure should immediately open the circuit
-		cb.failures++
-		cb.lastFailure = now
-		cb.state = StateOpen
-		cb.successes = 0
+		atomic.AddInt64(&cb.failures, 1)
+		atomic.StoreInt64(&cb.state, int64(StateOpen))
+		atomic.StoreInt64(&cb.successes, 0)
 	}
 }
 
 // RecordSuccess records a success in the circuit breaker
 func (cb *CircuitBreaker) RecordSuccess() {
-	switch cb.state {
+	state := CircuitState(atomic.LoadInt64(&cb.state))
+
+	switch state {
 	case StateClosed:
 		// Success in closed state doesn't change anything
 	case StateOpen:
 		// Success in open state doesn't change anything
 	case StateHalfOpen:
-		cb.successes++
-		if cb.successes >= cb.config.SuccessThreshold {
-			cb.state = StateClosed
-			cb.failures = 0
-			cb.successes = 0
+		successes := atomic.AddInt64(&cb.successes, 1)
+		if successes >= int64(cb.config.SuccessThreshold) {
+			atomic.StoreInt64(&cb.state, int64(StateClosed))
+			atomic.StoreInt64(&cb.failures, 0)
+			atomic.StoreInt64(&cb.successes, 0)
 		}
 	}
 }

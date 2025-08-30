@@ -2,7 +2,14 @@ package klayengo
 
 import (
 	"errors"
+	"strings"
 	"testing"
+	"time"
+)
+
+const (
+	testErrorFormat = "Expected '%s', got '%s'"
+	testMessage     = "test message"
 )
 
 func TestClientError(t *testing.T) {
@@ -14,7 +21,7 @@ func TestClientError(t *testing.T) {
 
 	expectedMsg := "NetworkError: connection timeout"
 	if err.Error() != expectedMsg {
-		t.Errorf("Expected '%s', got '%s'", expectedMsg, err.Error())
+		t.Errorf(testErrorFormat, expectedMsg, err.Error())
 	}
 
 	// Test error with cause
@@ -27,7 +34,63 @@ func TestClientError(t *testing.T) {
 
 	expectedMsgWithCause := "ServerError: internal server error (underlying error)"
 	if errWithCause.Error() != expectedMsgWithCause {
-		t.Errorf("Expected '%s', got '%s'", expectedMsgWithCause, errWithCause.Error())
+		t.Errorf(testErrorFormat, expectedMsgWithCause, errWithCause.Error())
+	}
+}
+
+func TestClientErrorWithRequestID(t *testing.T) {
+	err := &ClientError{
+		Type:       "NetworkError",
+		Message:    "connection timeout",
+		RequestID:  "req_123",
+		Attempt:    1,
+		MaxRetries: 3,
+	}
+
+	expectedMsg := "[req_123] NetworkError: connection timeout (attempt 1/3)"
+	if err.Error() != expectedMsg {
+		t.Errorf(testErrorFormat, expectedMsg, err.Error())
+	}
+}
+
+func TestClientErrorDebugInfo(t *testing.T) {
+	timestamp := time.Now()
+	err := &ClientError{
+		Type:       "TimeoutError",
+		Message:    "request timed out",
+		RequestID:  "req_456",
+		Method:     "GET",
+		URL:        "https://api.example.com/data",
+		Attempt:    2,
+		MaxRetries: 5,
+		Timestamp:  timestamp,
+		Duration:   10 * time.Second,
+		StatusCode: 0,
+		Endpoint:   "api.example.com/data",
+		Cause:      errors.New("context deadline exceeded"),
+	}
+
+	debugInfo := err.DebugInfo()
+	if !strings.Contains(debugInfo, "Error Type: TimeoutError") {
+		t.Error("DebugInfo should contain error type")
+	}
+	if !strings.Contains(debugInfo, "Request ID: req_456") {
+		t.Error("DebugInfo should contain request ID")
+	}
+	if !strings.Contains(debugInfo, "Method: GET") {
+		t.Error("DebugInfo should contain method")
+	}
+	if !strings.Contains(debugInfo, "URL: https://api.example.com/data") {
+		t.Error("DebugInfo should contain URL")
+	}
+	if !strings.Contains(debugInfo, "Attempt: 2/5") {
+		t.Error("DebugInfo should contain attempt info")
+	}
+	if !strings.Contains(debugInfo, "Duration: 10s") {
+		t.Error("DebugInfo should contain duration")
+	}
+	if !strings.Contains(debugInfo, "Cause: context deadline exceeded") {
+		t.Error("DebugInfo should contain cause")
 	}
 }
 
@@ -35,7 +98,7 @@ func TestClientErrorUnwrap(t *testing.T) {
 	cause := errors.New("original error")
 	err := &ClientError{
 		Type:    "TestError",
-		Message: "test message",
+		Message: testMessage,
 		Cause:   cause,
 	}
 
@@ -48,7 +111,7 @@ func TestClientErrorUnwrap(t *testing.T) {
 func TestClientErrorUnwrapNilCause(t *testing.T) {
 	err := &ClientError{
 		Type:    "TestError",
-		Message: "test message",
+		Message: testMessage,
 		Cause:   nil,
 	}
 
@@ -148,14 +211,15 @@ func TestClientErrorChain(t *testing.T) {
 	}
 
 	if rootCause != errors.New("root cause") {
-		// This is just to use rootCause to avoid unused variable warning
+		// This comparison is just to use rootCause to avoid unused variable warning
+		_ = rootCause
 	}
 }
 
 func TestClientErrorAs(t *testing.T) {
 	err := &ClientError{
 		Type:    "TestError",
-		Message: "test message",
+		Message: testMessage,
 	}
 
 	var clientErr *ClientError
