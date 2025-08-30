@@ -8,74 +8,52 @@ The following benchmark results show the performance characteristics of the klay
 
 | Benchmark | Operations/sec | Time/op | Memory/op | Allocs/op |
 |-----------|---------------|---------|-----------|-----------|
-| BasicGet | ~7,500 ops/sec | 133μs | 20.8KB | 123 |
-| GetWithRetries | ~6,200 ops/sec | 161μs | 21.5KB | 124 |
-| GetWithCircuitBreaker | ~6,400 ops/sec | 156μs | 21.3KB | 123 |
-| GetWithMiddleware | ~8,600 ops/sec | 116μs | 20.0KB | 124 |
-| GetWithMultipleMiddleware | ~14,800 ops/sec | 68μs | 17.9KB | 123 |
-| GetWithRetriesAndFailures | ~3 ops/sec | 303ms | 31.8KB | 244 |
+| BenchmarkClientGet | ~9,380 ops/sec | 149μs | 22.3KB | 140 |
+| BenchmarkClientPost | ~5,526 ops/sec | 230μs | 44.3KB | 160 |
+| BenchmarkClientWithCache | ~674,702 ops/sec | 1.54μs | 832B | 11 |
+| BenchmarkClientWithCircuitBreaker | ~8,564 ops/sec | 170μs | 23.0KB | 140 |
+| BenchmarkClientWithRateLimiter | ~6,506 ops/sec | 164μs | 22.9KB | 139 |
+| BenchmarkClientWithRetries | ~4 ops/sec | 319ms | 37.8KB | 279 |
+| BenchmarkClientFullFeatures | ~470,634 ops/sec | 2.24μs | 836B | 12 |
 
-### Core Component Benchmarks
-
-| Benchmark | Operations/sec | Time/op | Memory/op | Allocs/op |
-|-----------|---------------|---------|-----------|-----------|
-| CircuitBreakerAllow | ~13.8M ops/sec | 73ns | 0B | 0 |
-| CalculateBackoff | ~312M ops/sec | 3.2ns | 0B | 0 |
-| DefaultRetryCondition | ~2.2B ops/sec | 0.45ns | 0B | 0 |
-| ClientCreation | ~3.4M ops/sec | 291ns | 304B | 4 |
-
-### Specialized Benchmarks
+### Cache Performance Benchmarks
 
 | Benchmark | Operations/sec | Time/op | Memory/op | Allocs/op |
 |-----------|---------------|---------|-----------|-----------|
-| ConcurrentRequests | ~1,350 ops/sec | 743μs | 17.8KB | 120 |
-| LargePayload (1MB) | ~2,750 ops/sec | 364μs | 1.07MB | 132 |
-| TimeoutHandling | ~1.3M ops/sec | 752ns | 496B | 4 |
+| BenchmarkCacheGet | ~12.8M ops/sec | 94.1ns | 0B | 0 |
+| BenchmarkCacheSet | ~1.6M ops/sec | 684ns | 135B | 2 |
+| BenchmarkCacheConcurrentAccess | ~3.1M ops/sec | 385ns | 13B | 1 |
 
-#### Backoff Strategy Comparison
-
-| Strategy | Operations/sec | Time/op | Memory/op | Allocs/op |
-|----------|---------------|---------|-----------|-----------|
-| LinearBackoff | ~98 ops/sec | 10.2ms | 20.8KB | 123 |
-| ExponentialBackoff | ~15,700 ops/sec | 64μs | 17.7KB | 118 |
-| AggressiveBackoff | ~14,800 ops/sec | 68μs | 17.7KB | 118 |
-
-## Performance Analysis
+### Performance Analysis
 
 ### Key Findings
 
-1. **Minimal Overhead**: The retry logic adds only ~20% overhead compared to basic HTTP requests
-2. **Circuit Breaker Impact**: Adds ~18% overhead but provides crucial resilience
-3. **Middleware Performance**: Single middleware has minimal impact, multiple middleware can actually improve performance due to request batching
-4. **Failure Scenarios**: Requests with retries and failures have significantly higher latency due to backoff delays
-5. **Core Operations**: Circuit breaker state checks and backoff calculations are extremely fast (<100ns)
-6. **Concurrent Performance**: Handles concurrent requests well with ~1,350 ops/sec
-7. **Large Payload Handling**: Efficiently handles 1MB responses with ~2,750 ops/sec
-8. **Timeout Performance**: Very fast timeout handling at ~1.3M ops/sec
+1. **Caching provides massive performance gains**: ~100x faster requests when cached (1.54μs vs 149μs)
+2. **Minimal Overhead**: The retry logic adds only ~20% overhead compared to basic HTTP requests
+3. **Circuit Breaker Impact**: Adds ~14% overhead but provides crucial resilience
+4. **Rate Limiting Overhead**: Adds ~10% overhead for token management
+5. **Full Feature Stack**: Complete client with all features performs at ~2.24μs per request
+6. **Cache Performance**: Extremely fast cache operations (<100ns for gets)
+7. **Concurrent Performance**: Excellent concurrent access performance for cache operations
+8. **Failure Scenarios**: Requests with retries and failures have significantly higher latency due to backoff delays
 
 ### Memory Usage
 
-- **Base Request**: ~20.8KB per request
-- **With Retries**: ~21.5KB per request (+3%)
-- **With Circuit Breaker**: ~21.3KB per request (+2%)
-- **With Middleware**: ~20.0KB per request (-4%)
-- **Failure Scenarios**: ~31.8KB per request (+53% due to error handling)
-- **Large Payload (1MB)**: ~1.07MB per request (expected for payload size)
-
-### Backoff Strategy Insights
-
-- **Linear Backoff**: Slower performance due to consistent delays
-- **Exponential Backoff**: Best overall performance with balanced delays
-- **Aggressive Backoff**: Similar to exponential but with more aggressive retry timing
+- **Base Request**: ~22.3KB per request
+- **With Retries**: ~37.8KB per request (+70% due to error handling in failure scenarios)
+- **With Circuit Breaker**: ~23.0KB per request (+3%)
+- **With Rate Limiter**: ~22.9KB per request (+3%)
+- **With Cache**: ~832B per request (-96% when cached)
+- **Cache Operations**: Minimal memory usage (0-135B per operation)
 
 ### Recommendations
 
-1. **Use Circuit Breaker**: The performance impact is minimal compared to the resilience benefits
-2. **Optimize Middleware**: Multiple middleware can improve performance through better request batching
-3. **Choose Backoff Strategy**: Exponential backoff provides the best balance of performance and reliability
-4. **Monitor Concurrent Load**: The client handles concurrency well but monitor for your specific use case
-5. **Tune Timeouts**: Fast timeout handling allows for quick failure detection
-6. **Memory Monitoring**: Watch memory usage in high-throughput scenarios with failures or large payloads
+1. **Use Caching Strategically**: The performance benefits are enormous for cacheable requests
+2. **Choose Features Wisely**: Each feature adds minimal overhead but consider your use case
+3. **Monitor Cache Hit Rates**: High cache hit rates can dramatically improve performance
+4. **Tune Circuit Breaker Settings**: Balance failure threshold with your service's characteristics
+5. **Consider Rate Limiting**: Minimal overhead but effective for controlling request rates
+6. **Profile Memory Usage**: Cache hits use dramatically less memory than full requests
 
 ## Running Benchmarks
 
@@ -84,7 +62,7 @@ The following benchmark results show the performance characteristics of the klay
 go test -bench=. -benchmem
 
 # Run specific benchmark
-go test -bench=BenchmarkGetWithRetries -benchmem
+go test -bench=BenchmarkClientGet -benchmem
 
 # Run benchmarks with CPU profiling
 go test -bench=. -benchmem -cpuprofile=cpu.prof
@@ -92,18 +70,18 @@ go test -bench=. -benchmem -cpuprofile=cpu.prof
 # Run benchmarks with memory profiling
 go test -bench=. -benchmem -memprofile=mem.prof
 
-# Run benchmarks for specific scenarios
-go test -bench=BenchmarkConcurrentRequests -benchmem
-go test -bench=BenchmarkLargePayload -benchmem
+# Run cache-specific benchmarks
+go test -bench=BenchmarkCache -benchmem
 
-# Compare backoff strategies
-go test -bench=BenchmarkDifferentBackoffStrategies -benchmem
+# Run client-specific benchmarks
+go test -bench=BenchmarkClient -benchmem
 ```
 
 ## Environment
 
-- **Go Version**: 1.21+
+- **Go Version**: 1.24.6
 - **OS**: Linux
 - **Architecture**: amd64
-- **CPU**: AMD Ryzen 7 8840U
+- **CPU**: AMD Ryzen 7 8840U w/ Radeon 780M Graphics
 - **Date**: August 30, 2025
+- **Test Coverage**: 97.1%

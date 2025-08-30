@@ -9,23 +9,26 @@ A resilient HTTP client wrapper for Go with retry logic, exponential backoff, an
 ## Features
 
 - **Retry Logic**: Automatic retry on failed HTTP requests with configurable retry attempts
-- **Exponential Backoff**: Intelligent backoff strategy to avoid overwhelming servers
-- **Jitter**: Randomized backoff to prevent thundering herd problems
-- **Rate Limiting**: Configurable rate limiting to control request frequency
-- **Response Caching**: In-memory caching for GET requests to improve performance
+- **Exponential Backoff**: Intelligent backoff strategy with jitter to avoid overwhelming servers
+- **Rate Limiting**: Configurable token bucket rate limiting to control request frequency
+- **Response Caching**: In-memory caching for GET requests with customizable TTL and conditions
 - **Circuit Breaker**: Prevents cascading failures by temporarily stopping requests to failing services
 - **Custom Error Types**: Structured error handling with specific error types for different failure modes
 - **Context Cancellation**: Full support for Go context for request cancellation and timeouts
 - **Middleware Hooks**: Extensible middleware system for logging, metrics, and custom logic
-- **Configurable Options**: Highly customizable retry policies, timeouts, and behavior
+- **Configurable Options**: Highly customizable retry policies, timeouts, and behavior using functional options
 - **Thread-Safe**: Safe for concurrent use across multiple goroutines
 - **Prometheus Metrics**: Built-in metrics collection for monitoring and observability
+- **Per-Request Overrides**: Override global settings on a per-request basis using context
 
 ## Installation
 
 ```bash
 go get github.com/ambiyansyah-risyal/klayengo
 ```
+
+**Requirements:**
+- Go 1.23.0 or later (tested with Go 1.24.6)
 
 ## Quick Start
 
@@ -42,10 +45,10 @@ import (
 )
 
 func main() {
-    // Create a new retry client with default options
+    // Create a new resilient HTTP client with default options
     client := klayengo.New()
 
-    // Make a request with automatic retry
+    // Make a request with automatic retry and circuit breaker protection
     resp, err := client.Get(context.Background(), "https://api.example.com/data")
     if err != nil {
         fmt.Printf("Request failed: %v\n", err)
@@ -61,11 +64,14 @@ func main() {
 
 ### Basic Configuration
 
+### Basic Configuration
+
 ```go
 client := klayengo.New(
     klayengo.WithMaxRetries(5),
     klayengo.WithInitialBackoff(100*time.Millisecond),
     klayengo.WithMaxBackoff(10*time.Second),
+    klayengo.WithBackoffMultiplier(2.0),
     klayengo.WithJitter(0.1), // 10% jitter to avoid thundering herd
     klayengo.WithTimeout(30*time.Second),
 )
