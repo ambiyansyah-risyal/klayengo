@@ -66,5 +66,14 @@ coverage.xml
 # Benchmark results
 benchmarks.txt
 
-# Prometheus data
-data/
+# AI and development instructions
+.github/copilot-instructions.md
+AGENT.md
+AGENTS.md
+CLAUDE.md
+.cursorrules
+.windsurfrules
+.clinerules
+.cursor/rules/**
+.windsurf/rules/**
+.clinerules/**
