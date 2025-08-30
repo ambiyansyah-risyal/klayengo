@@ -1,0 +1,22 @@
+# Code owners for Klayengo
+# This file defines who owns and is responsible for different parts of the codebase
+
+# Global owners (catch-all)
+* @ambiyansyah-risyal
+
+# Core library components
+cache.go @ambiyansyah-risyal
+client.go @ambiyansyah-risyal
+circuit_breaker.go @ambiyansyah-risyal
+rate_limiter.go @ambiyansyah-risyal
+metrics.go @ambiyansyah-risyal
+
+# Examples
+examples/ @ambiyansyah-risyal
+
+# Documentation
+README.md @ambiyansyah-risyal
+BENCHMARKS.md @ambiyansyah-risyal
+
+# CI/CD and repository configuration
+.github/ @ambiyansyah-risyal
