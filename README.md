@@ -33,6 +33,7 @@ A resilient HTTP client wrapper for Go with retry logic, exponential backoff, an
 - [Features](#features)
 - [Performance](#performance)
 - [Installation](#installation)
+- [Donate](#donate)
 - [Quick Start](#quick-start)
 - [Configuration](#configuration)
 - [Advanced Usage](#advanced-usage)
@@ -45,6 +46,35 @@ A resilient HTTP client wrapper for Go with retry logic, exponential backoff, an
 - [Security](#security)
 - [Testing](#testing)
 - [License](#license)
+
+## Donate
+
+If you find Klayengo useful and would like to support its continued development, consider making a donation. Your support helps maintain the project, add new features, and provide timely bug fixes.
+
+### 💰 **Support Options**
+
+#### PayPal
+[![PayPal](https://img.shields.io/badge/PayPal-00457C?style=for-the-badge&logo=paypal&logoColor=white)](https://paypal.me/ambiyansyah)
+
+#### GitHub Sponsors
+[![GitHub Sponsors](https://img.shields.io/badge/sponsor-30363D?style=for-the-badge&logo=GitHub-Sponsors&logoColor=#EA4AAA)](https://github.com/sponsors/ambiyansyah-risyal)
+
+#### Buy Me a Coffee
+[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://www.buymeacoffee.com/ambiyansyahrisyal)
+
+### 💝 **Why Donate?**
+
+Your donations help with:
+- **Development Tools**: IDE licenses, testing hardware, and development software
+- **Open Source Time**: Time spent maintaining, documenting, and improving the library
+- **Community Support**: Answering questions, reviewing PRs, and helping users
+- **New Features**: Implementing requested features and enhancements
+- **Testing Infrastructure**: Maintaining comprehensive test suites and CI/CD pipelines
+- **Documentation**: Creating tutorials, examples, and comprehensive guides
+
+### 🙏 **Thank You**
+
+Every contribution, whether code, documentation, or financial support, is greatly appreciated. Thank you for supporting open-source development!
 
 ## Features
 
@@ -776,35 +806,6 @@ For detailed performance analysis and benchmarking results, see [`BENCHMARKS.md`
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Donate
-
-If you find Klayengo useful and would like to support its continued development, consider making a donation. Your support helps maintain the project, add new features, and provide timely bug fixes.
-
-### 💰 **Support Options**
-
-#### GitHub Sponsors
-[![GitHub Sponsors](https://img.shields.io/badge/sponsor-30363D?style=for-the-badge&logo=GitHub-Sponsors&logoColor=#EA4AAA)](https://github.com/sponsors/ambiyansyah-risyal)
-
-#### PayPal
-[![PayPal](https://img.shields.io/badge/PayPal-00457C?style=for-the-badge&logo=paypal&logoColor=white)](https://paypal.me/ambiyansyah)
-
-#### Buy Me a Coffee
-[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://www.buymeacoffee.com/ambiyansyahrisyal)
-
-### 💝 **Why Donate?**
-
-Your donations help with:
-- **Development Tools**: IDE licenses, testing hardware, and development software
-- **Open Source Time**: Time spent maintaining, documenting, and improving the library
-- **Community Support**: Answering questions, reviewing PRs, and helping users
-- **New Features**: Implementing requested features and enhancements
-- **Testing Infrastructure**: Maintaining comprehensive test suites and CI/CD pipelines
-- **Documentation**: Creating tutorials, examples, and comprehensive guides
-
-### 🙏 **Thank You**
-
-Every contribution, whether code, documentation, or financial support, is greatly appreciated. Thank you for supporting open-source development!
 
 ## Acknowledgments
 
