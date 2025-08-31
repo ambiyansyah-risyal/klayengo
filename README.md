@@ -5,14 +5,23 @@
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![CI](https://github.com/ambiyansyah-risyal/klayengo/workflows/CI/badge.svg)](https://github.com/ambiyansyah-risyal/klayengo/actions)
 [![codecov](https://codecov.io/gh/ambiyansyah-risyal/klayengo/branch/main/graph/badge.svg)](https://codecov.io/gh/ambiyansyah-risyal/klayengo)
+[![Go Version](https://img.shields.io/badge/go-%3E%3D1.23-00ADD8.svg)](https://golang.org/)
+[![Release](https://img.shields.io/github/v/release/ambiyansyah-risyal/klayengo)](https://github.com/ambiyansyah-risyal/klayengo/releases)
+[![Contributors](https://img.shields.io/github/contributors/ambiyansyah-risyal/klayengo)](https://github.com/ambiyansyah-risyal/klayengo/graphs/contributors)
+[![Stars](https://img.shields.io/github/stars/ambiyansyah-risyal/klayengo)](https://github.com/ambiyansyah-risyal/klayengo/stargazers)
+[![Forks](https://img.shields.io/github/forks/ambiyansyah-risyal/klayengo)](https://github.com/ambiyansyah-risyal/klayengo/network/members)
+[![Issues](https://img.shields.io/github/issues/ambiyansyah-risyal/klayengo)](https://github.com/ambiyansyah-risyal/klayengo/issues)
+[![Pull Requests](https://img.shields.io/github/issues-pr/ambiyansyah-risyal/klayengo)](https://github.com/ambiyansyah-risyal/klayengo/pulls)
+[![Last Commit](https://img.shields.io/github/last-commit/ambiyansyah-risyal/klayengo)](https://github.com/ambiyansyah-risyal/klayengo/commits/main)
+[![Repository Size](https://img.shields.io/github/repo-size/ambiyansyah-risyal/klayengo)](https://github.com/ambiyansyah-risyal/klayengo)
+[![Lines of Code](https://img.shields.io/tokei/lines/github/ambiyansyah-risyal/klayengo)](https://github.com/ambiyansyah-risyal/klayengo)
+[![GoDoc](https://godoc.org/github.com/ambiyansyah-risyal/klayengo?status.svg)](https://godoc.org/github.com/ambiyansyah-risyal/klayengo)
+[![Security](https://img.shields.io/badge/Security-Policy-green.svg)](SECURITY.md)
+[![Maintenance](https://img.shields.io/badge/Maintained%3F-yes-green.svg)](https://github.com/ambiyansyah-risyal/klayengo/graphs/commit-activity)
 
 A resilient HTTP client wrapper for Go with retry logic, exponential backoff, and circuit breaker pattern.
 
 ## Status
-
-[![CI](https://github.com/ambiyansyah-risyal/klayengo/workflows/CI/badge.svg)](https://github.com/ambiyansyah-risyal/klayengo/actions)
-[![codecov](https://codecov.io/gh/ambiyansyah-risyal/klayengo/branch/main/graph/badge.svg)](https://codecov.io/gh/ambiyansyah-risyal/klayengo)
-[![Go Report Card](https://goreportcard.com/badge/github.com/ambiyansyah-risyal/klayengo)](https://goreportcard.com/report/github.com/ambiyansyah-risyal/klayengo)
 
 **Version**: 1.0.0  
 **Go Version**: 1.23+ (tested with 1.24.6)  
@@ -86,40 +95,6 @@ A resilient HTTP client wrapper for Go with retry logic, exponential backoff, an
 - **Cache hit/miss statistics**
 - **Request duration histograms**
 
-## Performance
-
-Klayengo has been optimized for high-performance concurrent workloads with the following improvements:
-
-### Recent Optimizations (v1.x)
-
-- **Sharded Cache Architecture**: 16-shard cache with FNV-1a hashing reduces lock contention by ~26% in concurrent scenarios
-- **Atomic Operations**: Lock-free rate limiter and circuit breaker using atomic operations for better scalability
-- **Memory-Efficient Operations**: Optimized string operations and reduced allocations in hot paths
-- **Conditional Metrics**: Metrics collection is now conditional to reduce overhead in production
-- **Efficient Backoff Calculation**: Optimized exponential backoff with reduced computational overhead
-
-### Benchmark Results
-
-Performance improvements measured with `go test -bench=. -benchmem`:
-
-| Operation | Before | After | Improvement |
-|-----------|--------|-------|-------------|
-| Cache Get (concurrent) | 45.2 ns/op | 33.4 ns/op | +26% faster |
-| Cache Set (concurrent) | 52.8 ns/op | 41.1 ns/op | +22% faster |
-| Rate Limiter Allow | 12.3 ns/op | 8.7 ns/op | +29% faster |
-| Circuit Breaker Check | 15.6 ns/op | 11.2 ns/op | +28% faster |
-| Memory Allocations | 2.1 MB/op | 1.8 MB/op | -14% reduction |
-
-### Performance Best Practices
-
-- **Concurrent Usage**: Klayengo is optimized for high-concurrency scenarios with minimal lock contention
-- **Memory Management**: Cache size limits prevent unbounded memory growth
-- **Metrics Overhead**: Disable debug logging and metrics in production for maximum performance
-- **Connection Pooling**: Use custom HTTP clients with optimized connection pools for best results
-- **Context Timeouts**: Always use context with appropriate timeouts to prevent resource leaks
-
-For detailed benchmark results and performance analysis, see [`BENCHMARKS.md`](BENCHMARKS.md).
-
 ## Installation
 
 ```bash
@@ -160,8 +135,6 @@ func main() {
 ```
 
 ## Configuration
-
-### Basic Configuration
 
 ### Basic Configuration
 
@@ -299,9 +272,6 @@ client := klayengo.New(
   - Labels: `method`, `endpoint`
 - **`klayengo_cache_size`**: Current number of entries in cache (gauge)
   - Labels: `name`
-- **`klayengo_errors_total`**: Total number of errors encountered (counter)
-  - Labels: `type`, `method`, `endpoint`
-
 - **`klayengo_errors_total`**: Total number of errors encountered (counter)
   - Labels: `type`, `method`, `endpoint`
 
@@ -806,6 +776,38 @@ For detailed performance analysis and benchmarking results, see [`BENCHMARKS.md`
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Donate
+
+If you find Klayengo useful and would like to support its continued development, consider making a donation. Your support helps maintain the project, add new features, and provide timely bug fixes.
+
+### 💰 **Support Options**
+
+#### GitHub Sponsors
+[![GitHub Sponsors](https://img.shields.io/badge/sponsor-30363D?style=for-the-badge&logo=GitHub-Sponsors&logoColor=#EA4AAA)](https://github.com/sponsors/ambiyansyah-risyal)
+
+#### Ko-fi
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-F16061?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/ambiyansyahrisyal)
+
+#### PayPal
+[![PayPal](https://img.shields.io/badge/PayPal-00457C?style=for-the-badge&logo=paypal&logoColor=white)](https://paypal.me/ambiyansyahrisyal)
+
+#### Buy Me a Coffee
+[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://www.buymeacoffee.com/ambiyansyahrisyal)
+
+### 💝 **Why Donate?**
+
+Your donations help with:
+- **Development Tools**: IDE licenses, testing hardware, and development software
+- **Open Source Time**: Time spent maintaining, documenting, and improving the library
+- **Community Support**: Answering questions, reviewing PRs, and helping users
+- **New Features**: Implementing requested features and enhancements
+- **Testing Infrastructure**: Maintaining comprehensive test suites and CI/CD pipelines
+- **Documentation**: Creating tutorials, examples, and comprehensive guides
+
+### 🙏 **Thank You**
+
+Every contribution, whether code, documentation, or financial support, is greatly appreciated. Thank you for supporting open-source development!
 
 ## Acknowledgments
 
