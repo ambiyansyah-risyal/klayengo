@@ -49,9 +49,9 @@ A resilient HTTP client wrapper for Go with retry logic, exponential backoff, an
 
 ## Donate
 
-If you find Klayengo useful and would like to support its continued development, consider making a donation. Your support helps maintain the project, add new features, and provide timely bug fixes.
+Klayengo is a free and open-source project that I maintain in my spare time. If you've found it helpful and would like to show your appreciation, here are some ways you can support the project:
 
-### 💰 **Support Options**
+### � **Ways to Support**
 
 #### PayPal
 [![PayPal](https://img.shields.io/badge/PayPal-00457C?style=for-the-badge&logo=paypal&logoColor=white)](https://paypal.me/ambiyansyah)
@@ -62,19 +62,17 @@ If you find Klayengo useful and would like to support its continued development,
 #### Buy Me a Coffee
 [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://www.buymeacoffee.com/ambiyansyahrisyal)
 
-### 💝 **Why Donate?**
+### 🌟 **Your Support Helps With**
 
-Your donations help with:
-- **Development Tools**: IDE licenses, testing hardware, and development software
-- **Open Source Time**: Time spent maintaining, documenting, and improving the library
-- **Community Support**: Answering questions, reviewing PRs, and helping users
-- **New Features**: Implementing requested features and enhancements
-- **Testing Infrastructure**: Maintaining comprehensive test suites and CI/CD pipelines
-- **Documentation**: Creating tutorials, examples, and comprehensive guides
+Your generous contributions help sustain the project by supporting:
+- **Time Investment**: Dedicated time for maintenance, improvements, and community support
+- **Development Resources**: Tools, software licenses, and development environment costs
+- **Community Engagement**: Responding to issues, reviewing contributions, and helping users
+- **Future Development**: Planning and implementing new features and enhancements
 
 ### 🙏 **Thank You**
 
-Every contribution, whether code, documentation, or financial support, is greatly appreciated. Thank you for supporting open-source development!
+I'm truly grateful for the support from the community. Every star, issue report, pull request, and contribution - big or small - helps make Klayengo better. Thank you for being part of this journey!
 
 ## Features
 
