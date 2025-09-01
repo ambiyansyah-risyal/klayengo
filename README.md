@@ -51,16 +51,13 @@ A resilient HTTP client wrapper for Go with retry logic, exponential backoff, an
 
 Klayengo is a free and open-source project that I maintain in my spare time. If you've found it helpful and would like to show your appreciation, here are some ways you can support the project:
 
-### � **Ways to Support**
+### 💝 **Ways to Support**
 
 #### PayPal
 [![PayPal](https://img.shields.io/badge/PayPal-00457C?style=for-the-badge&logo=paypal&logoColor=white)](https://paypal.me/ambiyansyah)
 
 #### GitHub Sponsors
 [![GitHub Sponsors](https://img.shields.io/badge/sponsor-30363D?style=for-the-badge&logo=GitHub-Sponsors&logoColor=#EA4AAA)](https://github.com/sponsors/ambiyansyah-risyal)
-
-#### Buy Me a Coffee
-[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://www.buymeacoffee.com/ambiyansyahrisyal)
 
 ### 🌟 **Your Support Helps With**
 
