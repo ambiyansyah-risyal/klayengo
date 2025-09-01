@@ -28,6 +28,87 @@ A resilient HTTP client wrapper for Go with retry logic, exponential backoff, an
 **Test Coverage**: 86.7%  
 **License**: MIT
 
+## Versioning
+
+Klayengo follows [Semantic Versioning](https://semver.org/) for releases:
+
+- **MAJOR.MINOR.PATCH** (e.g., `v1.2.3`)
+- **MAJOR**: Breaking changes
+- **MINOR**: New features, backward compatible
+- **PATCH**: Bug fixes, backward compatible
+
+### Current Version
+
+```go
+import "github.com/ambiyansyah-risyal/klayengo"
+
+// Get version information
+fmt.Println(klayengo.GetVersion())
+
+// Get detailed version info
+versionInfo := klayengo.GetVersionInfo()
+fmt.Printf("Version: %s\n", versionInfo["version"])
+fmt.Printf("Commit: %s\n", versionInfo["commit"])
+fmt.Printf("Build Date: %s\n", versionInfo["build_date"])
+```
+
+### Release Process
+
+1. **Update version in code** (if needed):
+   ```bash
+   # Edit version.go or use build-time injection
+   make version  # Check current version
+   ```
+
+2. **Create and push git tag**:
+   ```bash
+   make tag VERSION=v1.1.0
+   # or manually:
+   git tag -a v1.1.0 -m "Release v1.1.0"
+   git push origin v1.1.0
+   ```
+
+3. **Create GitHub release**:
+   - Go to [Releases](https://github.com/ambiyansyah-risyal/klayengo/releases)
+   - Click "Create a new release"
+   - Use tag `v1.1.0`
+   - Add release notes describing changes
+
+4. **Update documentation**:
+   - Update version in README.md
+   - Update examples if API changed
+   - Update CHANGELOG.md (if you create one)
+
+### Build with Version Info
+
+The library includes build-time version injection:
+
+```bash
+# Build with current git info
+make build
+
+# Build with specific version
+make build VERSION=v1.1.0
+
+# Check version info
+make version
+```
+
+### Go Module Versioning
+
+When you release a new version, users can update using:
+
+```bash
+# Update to latest
+go get -u github.com/ambiyansyah-risyal/klayengo
+
+# Update to specific version
+go get github.com/ambiyansyah-risyal/klayengo@v1.1.0
+
+# Update to latest patch/minor
+go get github.com/ambiyansyah-risyal/klayengo@latest
+```
+
 ## Table of Contents
 
 - [Features](#features)

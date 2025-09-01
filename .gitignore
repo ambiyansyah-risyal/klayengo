@@ -53,6 +53,7 @@ Thumbs.db
 # Build artifacts
 dist/
 build/
+bin/
 
 # Example binaries (compiled examples)
 examples/*/example
