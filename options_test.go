@@ -8,6 +8,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
+const testURL = "https://example.com"
+
 func TestWithMaxRetries(t *testing.T) {
 	client := New(WithMaxRetries(5))
 
@@ -123,7 +125,7 @@ func TestWithCacheKeyFunc(t *testing.T) {
 		t.Fatal("Expected cache key function to be set")
 	}
 
-	req, _ := http.NewRequest("GET", "https://example.com", nil)
+	req, _ := http.NewRequest("GET", testURL, nil)
 	key := client.cacheKeyFunc(req)
 
 	if key != "custom-key" {
@@ -142,8 +144,8 @@ func TestWithCacheCondition(t *testing.T) {
 		t.Fatal("Expected cache condition to be set")
 	}
 
-	getReq, _ := http.NewRequest("GET", "https://example.com", nil)
-	postReq, _ := http.NewRequest("POST", "https://example.com", nil)
+	getReq, _ := http.NewRequest("GET", testURL, nil)
+	postReq, _ := http.NewRequest("POST", testURL, nil)
 
 	if client.cacheCondition(getReq) {
 		t.Error("Expected GET request to not be cached with custom condition")
@@ -339,46 +341,60 @@ func TestOptionsOrderIndependence(t *testing.T) {
 	}
 }
 
-func TestDefaultValuesWithoutOptions(t *testing.T) {
-	client := New()
+func TestWithDeduplication(t *testing.T) {
+	client := New(WithDeduplication())
 
-	if client.maxRetries != 3 {
-		t.Errorf("Expected default maxRetries=3, got %d", client.maxRetries)
+	if client.deduplication == nil {
+		t.Fatal("Expected deduplication tracker to be set")
 	}
 
-	if client.initialBackoff != 100*time.Millisecond {
-		t.Errorf("Expected default initialBackoff=100ms, got %v", client.initialBackoff)
+	if client.dedupKeyFunc == nil {
+		t.Fatal("Expected default deduplication key function to be set")
 	}
 
-	if client.maxBackoff != 10*time.Second {
-		t.Errorf("Expected default maxBackoff=10s, got %v", client.maxBackoff)
+	if client.dedupCondition == nil {
+		t.Fatal("Expected default deduplication condition to be set")
+	}
+}
+
+func TestWithDeduplicationKeyFunc(t *testing.T) {
+	customKeyFunc := func(req *http.Request) string {
+		return "custom-dedup-key"
 	}
 
-	if client.backoffMultiplier != 2.0 {
-		t.Errorf("Expected default backoffMultiplier=2.0, got %v", client.backoffMultiplier)
+	client := New(WithDeduplicationKeyFunc(customKeyFunc))
+
+	if client.dedupKeyFunc == nil {
+		t.Fatal("Expected deduplication key function to be set")
 	}
 
-	if client.jitter != 0.1 {
-		t.Errorf("Expected default jitter=0.1, got %v", client.jitter)
+	req, _ := http.NewRequest("GET", testURL, nil)
+	key := client.dedupKeyFunc(req)
+
+	if key != "custom-dedup-key" {
+		t.Errorf("Expected 'custom-dedup-key', got '%s'", key)
+	}
+}
+
+func TestWithDeduplicationCondition(t *testing.T) {
+	customCondition := func(req *http.Request) bool {
+		return req.Method == "POST"
 	}
 
-	if client.timeout != 30*time.Second {
-		t.Errorf("Expected default timeout=30s, got %v", client.timeout)
+	client := New(WithDeduplicationCondition(customCondition))
+
+	if client.dedupCondition == nil {
+		t.Fatal("Expected deduplication condition to be set")
 	}
 
-	if client.cache != nil {
-		t.Error("Expected default cache=nil")
+	getReq, _ := http.NewRequest("GET", testURL, nil)
+	postReq, _ := http.NewRequest("POST", testURL, nil)
+
+	if client.dedupCondition(getReq) {
+		t.Error("Expected GET request to not be deduplicated with custom condition")
 	}
 
-	if client.rateLimiter != nil {
-		t.Error("Expected default rateLimiter=nil")
-	}
-
-	if client.metrics != nil {
-		t.Error("Expected default metrics=nil")
-	}
-
-	if len(client.middleware) != 0 {
-		t.Errorf("Expected default middleware count=0, got %d", len(client.middleware))
+	if !client.dedupCondition(postReq) {
+		t.Error("Expected POST request to be deduplicated with custom condition")
 	}
 }

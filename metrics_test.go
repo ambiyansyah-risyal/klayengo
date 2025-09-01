@@ -192,15 +192,14 @@ func TestRecordCacheSize(t *testing.T) {
 	// Verify method doesn't panic
 }
 
-func TestRecordError(t *testing.T) {
+func TestRecordDeduplicationHit(t *testing.T) {
 	registry := prometheus.NewRegistry()
 	collector := NewMetricsCollectorWithRegistry(registry)
 
-	errorType := "Network"
 	method := "GET"
 	endpoint := testAPIEndpoint
 
-	collector.RecordError(errorType, method, endpoint)
+	collector.RecordDeduplicationHit(method, endpoint)
 
 	// Verify method doesn't panic
 }

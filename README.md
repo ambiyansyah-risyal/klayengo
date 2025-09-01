@@ -160,6 +160,7 @@ I'm truly grateful for the support from the community. Every star, issue report,
 - **Exponential Backoff**: Intelligent backoff strategy with jitter to avoid overwhelming servers
 - **Rate Limiting**: Configurable token bucket rate limiting to control request frequency
 - **Response Caching**: In-memory caching for GET requests with customizable TTL and conditions
+- **Request Deduplication**: Prevents duplicate concurrent requests by deduplicating identical in-flight requests
 - **Circuit Breaker**: Prevents cascading failures by temporarily stopping requests to failing services
 - **Custom Error Types**: Structured error handling with specific error types for different failure modes
 - **Context Cancellation**: Full support for Go context for request cancellation and timeouts
@@ -265,36 +266,50 @@ client := klayengo.New(
 )
 ```
 
-### Caching Configuration
+### Request Deduplication Configuration
+
+Request deduplication prevents multiple identical concurrent requests from being sent to the server. Only one request is actually executed, while others wait for the result:
 
 ```go
-// Enable caching with default in-memory cache
+// Enable request deduplication
 client := klayengo.New(
-    klayengo.WithCache(5*time.Minute), // Cache responses for 5 minutes
+    klayengo.WithDeduplication(),
 )
 
-// Use custom cache implementation
-customCache := klayengo.NewInMemoryCache()
+// Custom deduplication key function
 client := klayengo.New(
-    klayengo.WithCustomCache(customCache, 10*time.Minute),
-)
-
-// Custom cache key function
-client := klayengo.New(
-    klayengo.WithCacheKeyFunc(func(req *http.Request) string {
-        // Include headers in cache key for more specific caching
-        return fmt.Sprintf("%s:%s:%s", req.Method, req.URL.String(), req.Header.Get("Authorization"))
+    klayengo.WithDeduplication(),
+    klayengo.WithDeduplicationKeyFunc(func(req *http.Request) string {
+        // Include query parameters in deduplication key
+        return fmt.Sprintf("%s:%s?%s", req.Method, req.URL.Path, req.URL.RawQuery)
     }),
 )
 
-// Custom cache condition - only cache specific requests
+// Custom deduplication condition - only deduplicate specific requests
 client := klayengo.New(
-    klayengo.WithCacheCondition(func(req *http.Request) bool {
-        // Only cache GET requests to /api/data endpoint
-        return req.Method == "GET" && req.URL.Path == "/api/data"
+    klayengo.WithDeduplication(),
+    klayengo.WithDeduplicationCondition(func(req *http.Request) bool {
+        // Only deduplicate GET and HEAD requests
+        return req.Method == "GET" || req.Method == "HEAD"
     }),
 )
 ```
+
+#### Deduplication Behavior
+
+- **Concurrent Requests**: Multiple identical requests are automatically deduplicated
+- **First Request Wins**: The first request executes normally, others wait
+- **Shared Results**: All waiting requests receive the same response
+- **Timeout Handling**: Waiting requests respect context timeouts
+- **Memory Efficient**: Completed requests are cleaned up automatically
+- **Thread-Safe**: Safe for concurrent use across multiple goroutines
+
+#### Deduplication Metrics
+
+When deduplication is enabled, additional metrics are available:
+
+- **`klayengo_deduplication_hits_total`**: Total number of deduplication hits (counter)
+  - Labels: `method`, `endpoint`
 
 ### Per-Request Cache Control
 
@@ -380,6 +395,8 @@ client := klayengo.New(
   - Labels: `method`, `endpoint`
 - **`klayengo_cache_size`**: Current number of entries in cache (gauge)
   - Labels: `name`
+- **`klayengo_deduplication_hits_total`**: Total number of deduplication hits (counter)
+  - Labels: `method`, `endpoint`
 - **`klayengo_errors_total`**: Total number of errors encountered (counter)
   - Labels: `type`, `method`, `endpoint`
 
@@ -698,7 +715,9 @@ client := klayengo.New(
 - `WithDebugConfig(config *DebugConfig)` - Set custom debug configuration
 - `WithLogger(logger Logger)` - Set a custom logger for debug output
 - `WithSimpleLogger()` - Enable debug logging with a simple console logger
-- `WithRequestIDGenerator(gen func() string)` - Set a custom function for generating request IDs
+- `WithDeduplication()` - Enable request deduplication
+- `WithDeduplicationKeyFunc(fn DeduplicationKeyFunc)` - Custom deduplication key generation function
+- `WithDeduplicationCondition(fn DeduplicationCondition)` - Custom deduplication condition function
 
 ### Context Helper Functions
 
@@ -720,6 +739,8 @@ klayengo/
 ├── cache.go               # In-memory caching with sharding
 ├── circuit_breaker.go     # Circuit breaker pattern implementation
 ├── rate_limiter.go        # Token bucket rate limiting
+├── deduplication.go       # Request deduplication for concurrent requests
+├── deduplication_test.go  # Tests for deduplication functionality
 ├── metrics.go             # Prometheus metrics collection
 ├── errors.go              # Structured error handling
 ├── options.go             # Functional options pattern
@@ -727,7 +748,8 @@ klayengo/
 ├── examples/              # Usage examples
 │   ├── basic/            # Basic retry usage
 │   ├── advanced/         # Advanced features
-│   └── metrics/          # Metrics integration
+│   ├── metrics/          # Metrics integration
+│   └── deduplication/    # Request deduplication example
 ├── .github/              # GitHub configuration
 │   ├── workflows/        # CI/CD pipelines
 │   ├── ISSUE_TEMPLATE/   # Issue templates

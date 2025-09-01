@@ -29,6 +29,9 @@ type MetricsCollector struct {
 	cacheMisses *prometheus.CounterVec
 	cacheSize   *prometheus.GaugeVec
 
+	// Deduplication metrics
+	deduplicationHits *prometheus.CounterVec
+
 	// Error metrics
 	errorsTotal *prometheus.CounterVec
 
@@ -107,6 +110,13 @@ func NewMetricsCollectorWithRegistry(registry prometheus.Registerer) *MetricsCol
 				Help: "Current number of entries in cache",
 			},
 			[]string{"name"},
+		),
+		deduplicationHits: promauto.With(registry).NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "klayengo_deduplication_hits_total",
+				Help: "Total number of deduplication hits",
+			},
+			[]string{"method", "endpoint"},
 		),
 		errorsTotal: promauto.With(registry).NewCounterVec(
 			prometheus.CounterOpts{
@@ -222,6 +232,15 @@ func (mc *MetricsCollector) RecordError(errorType, method, endpoint string) {
 	}
 
 	mc.errorsTotal.WithLabelValues(errorType, method, endpoint).Inc()
+}
+
+// RecordDeduplicationHit records a deduplication hit
+func (mc *MetricsCollector) RecordDeduplicationHit(method, endpoint string) {
+	if mc == nil {
+		return
+	}
+
+	mc.deduplicationHits.WithLabelValues(method, endpoint).Inc()
 }
 
 // GetRegistry returns the Prometheus registry
