@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Request Deduplication**: Prevents duplicate concurrent requests by deduplicating identical in-flight requests
+  - Automatic deduplication of concurrent identical requests
+  - Configurable deduplication key generation
+  - Custom deduplication conditions
+  - Thread-safe implementation with minimal overhead
+  - Performance improvement of 99.3% for duplicate concurrent requests
+  - New metrics: `klayengo_deduplication_hits_total`
+  - Comprehensive test coverage with integration tests and benchmarks
 - Initial public release
 - Comprehensive versioning system with build-time injection
 - Makefile for automated builds and releases

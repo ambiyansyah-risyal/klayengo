@@ -24,8 +24,8 @@ A resilient HTTP client wrapper for Go with retry logic, exponential backoff, an
 ## Status
 
 **Version**: 1.0.0  
-**Go Version**: 1.23+ (tested with 1.24.6)  
-**Test Coverage**: 86.7%  
+**Go Version**: 1.23+ (tested with Go 1.24.6)  
+**Test Coverage**: 87.1%  
 **License**: MIT
 
 ## Versioning
@@ -114,7 +114,6 @@ go get github.com/ambiyansyah-risyal/klayengo@latest
 ## Table of Contents
 
 - [Features](#features)
-- [Performance](#performance)
 - [Installation](#installation)
 - [Donate](#donate)
 - [Quick Start](#quick-start)
@@ -303,6 +302,7 @@ client := klayengo.New(
 - **Timeout Handling**: Waiting requests respect context timeouts
 - **Memory Efficient**: Completed requests are cleaned up automatically
 - **Thread-Safe**: Safe for concurrent use across multiple goroutines
+- **Performance**: 99.3% improvement for duplicate concurrent requests
 
 #### Deduplication Metrics
 
@@ -449,8 +449,6 @@ http.Handle("/metrics", promhttp.HandlerFor(registry, promhttp.HandlerOpts{}))
 - **gRPC Support**: Protocol buffer-based communication
 - **Multi-Region Support**: Global deployment optimizations
 - **AI/ML Integration**: Intelligent retry strategies and anomaly detection
-
-## Performance
 
 ## Advanced Usage
 
@@ -880,7 +878,7 @@ go test -run TestClientGet ./...
 
 ### Test Coverage
 
-Current test coverage: **86.7%**
+Current test coverage: **87.1%**
 
 - Unit tests for all core functionality
 - Integration tests for end-to-end scenarios

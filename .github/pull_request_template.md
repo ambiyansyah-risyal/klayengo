@@ -43,6 +43,7 @@ go test -bench=. -benchmem ./...
 cd examples/basic && go run main.go
 cd examples/advanced && go run main.go
 cd examples/metrics && go run main.go
+cd examples/deduplication && go run main.go
 ```
 
 ## Breaking Changes
