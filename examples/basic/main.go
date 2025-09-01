@@ -11,6 +11,9 @@ import (
 )
 
 func main() {
+	// Display version information
+	fmt.Printf("Klayengo Version: %s\n\n", klayengo.GetVersion())
+
 	// Create a retry client with enhanced error handling and debugging
 	client := klayengo.New(
 		klayengo.WithMaxRetries(3),

@@ -52,32 +52,34 @@ fmt.Printf("Commit: %s\n", versionInfo["commit"])
 fmt.Printf("Build Date: %s\n", versionInfo["build_date"])
 ```
 
-### Release Process
+### Using the Version Management Script
 
-1. **Update version in code** (if needed):
-   ```bash
-   # Edit version.go or use build-time injection
-   make version  # Check current version
-   ```
+Klayengo includes a comprehensive version management script for easy releases:
 
-2. **Create and push git tag**:
-   ```bash
-   make tag VERSION=v1.1.0
-   # or manually:
-   git tag -a v1.1.0 -m "Release v1.1.0"
-   git push origin v1.1.0
-   ```
+```bash
+# Show current version information
+./scripts/version.sh show
 
-3. **Create GitHub release**:
-   - Go to [Releases](https://github.com/ambiyansyah-risyal/klayengo/releases)
-   - Click "Create a new release"
-   - Use tag `v1.1.0`
-   - Add release notes describing changes
+# Create a specific version
+./scripts/version.sh create v1.1.0
 
-4. **Update documentation**:
-   - Update version in README.md
-   - Update examples if API changed
-   - Update CHANGELOG.md (if you create one)
+# Bump version automatically
+./scripts/version.sh bump minor    # v1.0.0 -> v1.1.0
+./scripts/version.sh bump major    # v1.0.0 -> v2.0.0
+./scripts/version.sh bump patch    # v1.0.0 -> v1.0.1
+
+# Dry run (see what would happen without making changes)
+./scripts/version.sh create v1.1.0 --dry-run
+./scripts/version.sh bump minor --dry-run
+```
+
+The script automatically:
+- Updates `version.go` with the new version
+- Updates the version in `README.md`
+- Adds an entry to `CHANGELOG.md`
+- Creates a git commit and tag
+- Pushes changes to the remote repository
+- Triggers automated GitHub releases
 
 ### Build with Version Info
 

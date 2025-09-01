@@ -59,16 +59,21 @@ tag:
 	git tag -a $(VERSION) -m "Release $(VERSION)"
 	git push origin $(VERSION)
 
-# Release process (usage: make release VERSION=v1.1.0)
-release: test
-	@if [ -z "$(VERSION)" ]; then echo "Error: VERSION is required. Usage: make release VERSION=v1.1.0"; exit 1; fi
-	@echo "Releasing $(VERSION)..."
-	$(MAKE) tag VERSION=$(VERSION)
-	@echo "Release $(VERSION) created successfully!"
-	@echo "Don't forget to:"
-	@echo "1. Create a GitHub release with the changelog"
-	@echo "2. Update the version in README.md if needed"
-	@echo "3. Update examples/go.mod files if the API changed"
+# Release process using version script (usage: make release-auto VERSION=v1.1.0)
+release-auto: test
+	@if [ -z "$(VERSION)" ]; then echo "Error: VERSION is required. Usage: make release-auto VERSION=v1.1.0"; exit 1; fi
+	@echo "Creating release $(VERSION) using version script..."
+	./scripts/version.sh create $(VERSION)
+
+# Bump version using script (usage: make bump-minor, make bump-major, make bump-patch)
+bump-minor:
+	./scripts/version.sh bump minor
+
+bump-major:
+	./scripts/version.sh bump major
+
+bump-patch:
+	./scripts/version.sh bump patch
 
 # Install development dependencies
 install-dev:
@@ -105,6 +110,10 @@ help:
 	@echo "  version       - Show current version information"
 	@echo "  tag           - Create a git tag (requires VERSION=v1.x.x)"
 	@echo "  release       - Create a release (requires VERSION=v1.x.x)"
+	@echo "  release-auto  - Create a release using version script (requires VERSION=v1.x.x)"
+	@echo "  bump-minor    - Bump minor version using version script"
+	@echo "  bump-major    - Bump major version using version script"
+	@echo "  bump-patch    - Bump patch version using version script"
 	@echo "  install-dev   - Install development dependencies"
 	@echo "  lint          - Run linter"
 	@echo "  fmt           - Format code"
