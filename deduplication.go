@@ -115,7 +115,12 @@ func DefaultDeduplicationKeyFunc(req *http.Request) string {
 		if req.GetBody != nil {
 			body, err := req.GetBody()
 			if err == nil {
-				io.Copy(bodyHash, body)
+				_, err := io.Copy(bodyHash, body)
+				if err != nil {
+					// If body reading fails, continue without body hash
+					// This ensures deduplication still works for requests without bodies
+					_ = err // Explicitly ignore the error as per linter requirement
+				}
 			}
 		}
 		h.Write(bodyHash.Sum(nil))

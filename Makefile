@@ -84,13 +84,13 @@ install-dev:
 # Run linting
 lint:
 	@echo "Running linter..."
-	golangci-lint run
+	$(shell go env GOPATH)/bin/golangci-lint run
 
 # Format code
 fmt:
 	@echo "Formatting code..."
 	go fmt ./...
-	goimports -w .
+	$(shell go env GOPATH)/bin/goimports -w .
 
 # Update dependencies
 deps:

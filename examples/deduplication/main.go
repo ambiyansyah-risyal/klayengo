@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/http"
 	"sync"
 	"time"
@@ -25,7 +26,9 @@ func main() {
 			fmt.Printf("Server: Handling request at %s\n", time.Now().Format("15:04:05.000"))
 			time.Sleep(2 * time.Second) // Simulate slow response
 			w.WriteHeader(200)
-			w.Write([]byte(fmt.Sprintf("Response at %s", time.Now().Format("15:04:05.000"))))
+			if _, err := w.Write([]byte(fmt.Sprintf("Response at %s", time.Now().Format("15:04:05.000")))); err != nil {
+				log.Printf("Failed to write response: %v", err)
+			}
 		}),
 	}
 

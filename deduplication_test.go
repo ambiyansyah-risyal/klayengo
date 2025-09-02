@@ -44,7 +44,9 @@ func TestDeduplicationIntegration(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(100 * time.Millisecond) // Simulate slow response
 		w.WriteHeader(200)
-		w.Write([]byte("OK"))
+		if _, err := w.Write([]byte("OK")); err != nil {
+			t.Errorf("Failed to write response: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -241,7 +243,9 @@ func TestDeduplicationPerformanceBenefit(t *testing.T) {
 		callCount++
 		time.Sleep(10 * time.Millisecond) // Simulate network latency
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("response"))
+		if _, err := w.Write([]byte("response")); err != nil {
+			t.Errorf("Failed to write response: %v", err)
+		}
 	}))
 	defer server.Close()
 

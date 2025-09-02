@@ -38,12 +38,16 @@ func main() {
 			// Simulate occasional failures
 			if time.Now().Unix()%5 == 0 {
 				w.WriteHeader(http.StatusInternalServerError)
-				w.Write([]byte("Internal Server Error"))
+				if _, err := w.Write([]byte("Internal Server Error")); err != nil {
+					log.Printf("Failed to write error response: %v", err)
+				}
 				return
 			}
 
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("Success"))
+			if _, err := w.Write([]byte("Success")); err != nil {
+				log.Printf("Failed to write success response: %v", err)
+			}
 		}),
 	}
 
