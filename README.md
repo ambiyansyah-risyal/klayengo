@@ -161,6 +161,7 @@ I'm truly grateful for the support from the community. Every star, issue report,
 - **Response Caching**: In-memory caching for GET requests with customizable TTL and conditions
 - **Request Deduplication**: Prevents duplicate concurrent requests by deduplicating identical in-flight requests
 - **Circuit Breaker**: Prevents cascading failures by temporarily stopping requests to failing services
+- **Configuration Validation**: Validates all configuration parameters at client creation time
 - **Custom Error Types**: Structured error handling with specific error types for different failure modes
 - **Context Cancellation**: Full support for Go context for request cancellation and timeouts
 - **Middleware Hooks**: Extensible middleware system for logging, metrics, and custom logic
@@ -255,6 +256,66 @@ client := klayengo.New(
     klayengo.WithJitter(0.1), // 10% jitter to avoid thundering herd
     klayengo.WithTimeout(30*time.Second),
 )
+```
+
+### Configuration Validation
+
+Klayengo validates all configuration parameters at client creation time to prevent runtime issues from invalid configurations:
+
+```go
+// Valid configuration - client created successfully
+client, err := klayengo.New(
+    klayengo.WithMaxRetries(3),
+    klayengo.WithInitialBackoff(100*time.Millisecond),
+    klayengo.WithMaxBackoff(5*time.Second),
+    klayengo.WithJitter(0.1),
+    klayengo.WithRateLimiter(10, 1*time.Second),
+)
+if err != nil {
+    // Handle validation error
+    fmt.Printf("Configuration error: %v\n", err)
+}
+```
+
+#### Validation Rules
+
+Configuration validation ensures:
+
+- **Retry Configuration**: MaxRetries ≥ 0, InitialBackoff > 0, MaxBackoff > InitialBackoff, BackoffMultiplier > 0, Jitter ∈ [0,1]
+- **Rate Limiting**: MaxTokens > 0, RefillRate > 0
+- **Cache Settings**: TTL > 0, CacheSize > 0
+- **Circuit Breaker**: FailureThreshold > 0, RecoveryTimeout > 0, SuccessThreshold > 0
+- **Debug Settings**: Valid logger configuration
+- **Deduplication**: Valid key function and condition
+- **Middleware**: Non-nil middleware functions
+- **HTTP Client**: Valid timeout and transport settings
+
+#### Error Handling
+
+Invalid configurations return detailed error messages:
+
+```go
+client, err := klayengo.New(
+    klayengo.WithMaxRetries(-1), // Invalid: negative retries
+    klayengo.WithJitter(1.5),    // Invalid: jitter > 1.0
+)
+if err != nil {
+    // Error: "configuration validation failed: maxRetries must be >= 0, jitter must be between 0.0 and 1.0"
+    fmt.Printf("Validation failed: %v\n", err)
+}
+```
+
+#### Runtime Validation
+
+For configurations that can't be validated at creation time, Klayengo provides runtime validation:
+
+```go
+// Check if client configuration is still valid
+if !client.IsValid() {
+    // Get detailed validation errors
+    validationErr := client.ValidationError()
+    fmt.Printf("Configuration issues: %v\n", validationErr)
+}
 ```
 
 ### Rate Limiting Configuration

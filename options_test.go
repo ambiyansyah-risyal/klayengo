@@ -2,6 +2,7 @@ package klayengo
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -9,6 +10,25 @@ import (
 )
 
 const testURL = "https://example.com"
+
+// Validation error message constants
+const (
+	ErrMsgMaxRetriesNegative             = "maxRetries must be non-negative"
+	ErrMsgInitialBackoffPositive         = "initialBackoff must be positive"
+	ErrMsgMaxBackoffGTEInitial           = "maxBackoff must be greater than or equal to initialBackoff"
+	ErrMsgBackoffMultiplierPositive      = "backoffMultiplier must be positive"
+	ErrMsgJitterRange                    = "jitter must be between 0 and 1"
+	ErrMsgTimeoutPositive                = "timeout must be positive"
+	ErrMsgRateLimiterMaxTokens           = "rateLimiter maxTokens must be positive"
+	ErrMsgRateLimiterRefillRate          = "rateLimiter refillRate must be positive"
+	ErrMsgCacheTTLPositive               = "cacheTTL must be positive when cache is enabled"
+	ErrMsgCircuitBreakerFailureThreshold = "circuitBreaker FailureThreshold must be positive"
+	ErrMsgCircuitBreakerRecoveryTimeout  = "circuitBreaker RecoveryTimeout must be positive"
+	ErrMsgCircuitBreakerSuccessThreshold = "circuitBreaker SuccessThreshold must be positive"
+	ErrMsgDebugLoggerRequired            = "logger must be set when debug is enabled"
+	ErrMsgDebugRequestIDGenRequired      = "debug RequestIDGen must be set when debug is enabled"
+	ErrMsgMiddlewareNil                  = "middleware[0] cannot be nil"
+)
 
 func TestWithMaxRetries(t *testing.T) {
 	client := New(WithMaxRetries(5))
@@ -396,5 +416,282 @@ func TestWithDeduplicationCondition(t *testing.T) {
 
 	if !client.dedupCondition(postReq) {
 		t.Error("Expected POST request to be deduplicated with custom condition")
+	}
+}
+
+func TestValidateConfigurationValid(t *testing.T) {
+	tests := []struct {
+		name    string
+		options []Option
+	}{
+		{
+			name:    "default configuration",
+			options: []Option{},
+		},
+		{
+			name: "custom valid configuration",
+			options: []Option{
+				WithMaxRetries(5),
+				WithInitialBackoff(200 * time.Millisecond),
+				WithMaxBackoff(20 * time.Second),
+				WithBackoffMultiplier(2.5),
+				WithJitter(0.2),
+				WithTimeout(60 * time.Second),
+				WithRateLimiter(100, 1*time.Minute),
+				WithCache(10 * time.Minute),
+				WithCircuitBreaker(CircuitBreakerConfig{
+					FailureThreshold: 3,
+					RecoveryTimeout:  30 * time.Second,
+					SuccessThreshold: 2,
+				}),
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := New(tt.options...)
+			if !client.IsValid() {
+				t.Errorf("Expected configuration to be valid, got error: %v", client.ValidationError())
+			}
+		})
+	}
+}
+
+func TestValidateConfigurationRetryErrors(t *testing.T) {
+	tests := []struct {
+		name     string
+		options  []Option
+		errorMsg string
+	}{
+		{
+			name:     "maxRetries negative",
+			options:  []Option{WithMaxRetries(-1)},
+			errorMsg: ErrMsgMaxRetriesNegative,
+		},
+		{
+			name:     "initialBackoff zero",
+			options:  []Option{WithInitialBackoff(0)},
+			errorMsg: ErrMsgInitialBackoffPositive,
+		},
+		{
+			name:     "initialBackoff negative",
+			options:  []Option{WithInitialBackoff(-100 * time.Millisecond)},
+			errorMsg: ErrMsgInitialBackoffPositive,
+		},
+		{
+			name: "maxBackoff less than initialBackoff",
+			options: []Option{
+				WithInitialBackoff(1 * time.Second),
+				WithMaxBackoff(500 * time.Millisecond),
+			},
+			errorMsg: ErrMsgMaxBackoffGTEInitial,
+		},
+		{
+			name:     "backoffMultiplier zero",
+			options:  []Option{WithBackoffMultiplier(0)},
+			errorMsg: ErrMsgBackoffMultiplierPositive,
+		},
+		{
+			name:     "backoffMultiplier negative",
+			options:  []Option{WithBackoffMultiplier(-1.0)},
+			errorMsg: ErrMsgBackoffMultiplierPositive,
+		},
+		{
+			name:     "jitter negative (clamped to 0)",
+			options:  []Option{WithJitter(-0.1)},
+			errorMsg: "", // No error since it's clamped
+		},
+		{
+			name:     "jitter greater than 1 (clamped to 1)",
+			options:  []Option{WithJitter(1.5)},
+			errorMsg: "", // No error since it's clamped
+		},
+		{
+			name:     "timeout zero",
+			options:  []Option{WithTimeout(0)},
+			errorMsg: ErrMsgTimeoutPositive,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := New(tt.options...)
+			if tt.errorMsg == "" {
+				// No error expected
+				if !client.IsValid() {
+					t.Errorf("Expected configuration to be valid, got error: %v", client.ValidationError())
+				}
+			} else {
+				// Error expected
+				if client.IsValid() {
+					t.Error("Expected configuration to be invalid")
+				}
+				if !strings.Contains(client.ValidationError().Error(), tt.errorMsg) {
+					t.Errorf("Expected error to contain '%s', got: %v", tt.errorMsg, client.ValidationError())
+				}
+			}
+		})
+	}
+}
+
+func TestValidateConfigurationRateLimiterErrors(t *testing.T) {
+	tests := []struct {
+		name     string
+		options  []Option
+		errorMsg string
+	}{
+		{
+			name:     "rateLimiter maxTokens zero",
+			options:  []Option{WithRateLimiter(0, 1*time.Minute)},
+			errorMsg: ErrMsgRateLimiterMaxTokens,
+		},
+		{
+			name:     "rateLimiter refillRate zero",
+			options:  []Option{WithRateLimiter(100, 0)},
+			errorMsg: ErrMsgRateLimiterRefillRate,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := New(tt.options...)
+			if client.IsValid() {
+				t.Error("Expected configuration to be invalid")
+			}
+			if !strings.Contains(client.ValidationError().Error(), tt.errorMsg) {
+				t.Errorf("Expected error to contain '%s', got: %v", tt.errorMsg, client.ValidationError())
+			}
+		})
+	}
+}
+
+func TestValidateConfigurationCacheErrors(t *testing.T) {
+	client := New(WithCache(0))
+	if client.IsValid() {
+		t.Error("Expected configuration to be invalid")
+	}
+	if !strings.Contains(client.ValidationError().Error(), ErrMsgCacheTTLPositive) {
+		t.Errorf("Expected error to contain '%s', got: %v", ErrMsgCacheTTLPositive, client.ValidationError())
+	}
+}
+
+func TestValidateConfigurationCircuitBreakerErrors(t *testing.T) {
+	// Circuit breaker defaults are set in WithCircuitBreaker and NewCircuitBreaker
+	// so zero/negative values get converted to valid defaults
+	// This test verifies that defaults are applied correctly
+	client := New(WithCircuitBreaker(CircuitBreakerConfig{}))
+	if !client.IsValid() {
+		t.Errorf("Expected configuration to be valid with default circuit breaker, got error: %v", client.ValidationError())
+	}
+	if client.circuitBreaker.config.FailureThreshold != 5 {
+		t.Errorf("Expected default FailureThreshold=5, got %d", client.circuitBreaker.config.FailureThreshold)
+	}
+	if client.circuitBreaker.config.SuccessThreshold != 2 {
+		t.Errorf("Expected default SuccessThreshold=2, got %d", client.circuitBreaker.config.SuccessThreshold)
+	}
+	if client.circuitBreaker.config.RecoveryTimeout != 60*time.Second {
+		t.Errorf("Expected default RecoveryTimeout=60s, got %v", client.circuitBreaker.config.RecoveryTimeout)
+	}
+}
+
+func TestValidateConfigurationDebugErrors(t *testing.T) {
+	tests := []struct {
+		name     string
+		options  []Option
+		errorMsg string
+	}{
+		{
+			name:     "debug without logger",
+			options:  []Option{WithDebug()},
+			errorMsg: ErrMsgDebugLoggerRequired,
+		},
+		{
+			name: "debug without RequestIDGen",
+			options: []Option{
+				WithDebugConfig(&DebugConfig{
+					Enabled:      true,
+					RequestIDGen: nil,
+				}),
+				WithSimpleLogger(),
+			},
+			errorMsg: ErrMsgDebugRequestIDGenRequired,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := New(tt.options...)
+			if client.IsValid() {
+				t.Error("Expected configuration to be invalid")
+			}
+			if !strings.Contains(client.ValidationError().Error(), tt.errorMsg) {
+				t.Errorf("Expected error to contain '%s', got: %v", tt.errorMsg, client.ValidationError())
+			}
+		})
+	}
+}
+
+func TestValidateConfigurationMiddlewareErrors(t *testing.T) {
+	client := New(WithMiddleware(nil))
+	if client.IsValid() {
+		t.Error("Expected configuration to be invalid")
+	}
+	if !strings.Contains(client.ValidationError().Error(), ErrMsgMiddlewareNil) {
+		t.Errorf("Expected error to contain '%s', got: %v", ErrMsgMiddlewareNil, client.ValidationError())
+	}
+}
+
+func TestValidateConfigurationMultipleErrors(t *testing.T) {
+	client := New(
+		WithMaxRetries(-1),
+		WithInitialBackoff(0),
+		WithTimeout(0),
+	)
+
+	if client.IsValid() {
+		t.Error("Expected configuration to be invalid")
+	}
+
+	err := client.ValidationError()
+	if err == nil {
+		t.Fatal("Expected validation error")
+	}
+
+	errStr := err.Error()
+	expectedErrors := []string{
+		"maxRetries must be non-negative",
+		"initialBackoff must be positive",
+		"timeout must be positive",
+	}
+
+	for _, expected := range expectedErrors {
+		if !strings.Contains(errStr, expected) {
+			t.Errorf("Expected error to contain '%s', got: %s", expected, errStr)
+		}
+	}
+}
+
+func TestIsValid(t *testing.T) {
+	validClient := New(WithMaxRetries(5))
+	if !validClient.IsValid() {
+		t.Error("Expected valid client to return true for IsValid()")
+	}
+
+	invalidClient := New(WithMaxRetries(-1))
+	if invalidClient.IsValid() {
+		t.Error("Expected invalid client to return false for IsValid()")
+	}
+}
+
+func TestValidationError(t *testing.T) {
+	validClient := New(WithMaxRetries(5))
+	if validClient.ValidationError() != nil {
+		t.Errorf("Expected no validation error for valid config, got: %v", validClient.ValidationError())
+	}
+
+	invalidClient := New(WithMaxRetries(-1))
+	if invalidClient.ValidationError() == nil {
+		t.Error("Expected validation error for invalid config")
 	}
 }
