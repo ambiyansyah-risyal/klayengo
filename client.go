@@ -113,13 +113,14 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	dedupEnabled := c.deduplication != nil && c.dedupCondition(req)
 
 	var dedupEntry *DeduplicationEntry
+	var isDedupOwner bool
 	if dedupEnabled {
 		dedupKey := c.dedupKeyFunc(req)
-		dedupEntry = c.deduplication.GetOrCreateEntry(dedupKey)
+		dedupEntry, isDedupOwner = c.deduplication.GetOrCreateEntry(dedupKey)
 
-		// Wait for the result if this is not the first request
-		if resp, err := dedupEntry.Wait(req.Context()); resp != nil || err != nil {
-			// This was a duplicate request, return the result
+		// If this is not the owner, wait for the result
+		if !isDedupOwner {
+			resp, err := dedupEntry.Wait(req.Context())
 			duration := time.Since(start)
 			if c.metrics != nil {
 				statusCode := 0
@@ -138,7 +139,7 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 			return resp, err
 		}
 
-		// Debug logging for first request
+		// Debug logging for owner
 		if c.debug != nil && c.debug.Enabled && c.logger != nil {
 			c.logger.Debug("Deduplication miss - proceeding with request", "requestID", requestID, "dedupKey", dedupKey)
 		}
@@ -226,8 +227,8 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 		}
 	}
 
-	// Complete deduplication if enabled
-	if dedupEnabled && dedupEntry != nil {
+	// Complete deduplication if enabled and this was the owner
+	if dedupEnabled && isDedupOwner && dedupEntry != nil {
 		dedupKey := c.dedupKeyFunc(req)
 		c.deduplication.Complete(dedupKey, resp, err)
 	}

@@ -18,21 +18,28 @@ func TestDeduplicationTracker(t *testing.T) {
 	tracker := NewDeduplicationTracker()
 
 	key := "test-key"
-	entry := tracker.GetOrCreateEntry(key)
+	_, isOwner := tracker.GetOrCreateEntry(key)
 
-	// First call should not wait
-	resp1, err1 := entry.Wait(context.Background())
-	if resp1 != nil || err1 != nil {
-		t.Errorf("First waiter should not receive result, got resp=%v, err=%v", resp1, err1)
+	// First call should be the owner
+	if !isOwner {
+		t.Error("First call should be the owner")
 	}
+
+	// Owner should not wait - it should make the request
+	// Simulate making the request...
 
 	// Complete the entry
 	testResp := &http.Response{StatusCode: 200}
 	testErr := error(nil)
 	tracker.Complete(key, testResp, testErr)
 
-	// Second call should wait and get the result
-	entry2 := tracker.GetOrCreateEntry(key)
+	// Second call should not be the owner
+	entry2, isOwner2 := tracker.GetOrCreateEntry(key)
+	if isOwner2 {
+		t.Error("Second call should not be the owner")
+	}
+
+	// Second caller should wait and get the result
 	resp2, err2 := entry2.Wait(context.Background())
 	if resp2 != testResp || err2 != testErr {
 		t.Errorf("Second waiter should receive result, got resp=%v, err=%v", resp2, err2)
@@ -231,7 +238,7 @@ func BenchmarkDeduplicationTracker(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		key := fmt.Sprintf("key-%d", i%1000)
-		entry := tracker.GetOrCreateEntry(key)
+		entry, _ := tracker.GetOrCreateEntry(key)
 		_ = entry
 	}
 }

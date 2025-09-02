@@ -34,7 +34,8 @@ func NewDeduplicationTracker() *DeduplicationTracker {
 }
 
 // GetOrCreateEntry gets an existing entry or creates a new one for the given key
-func (dt *DeduplicationTracker) GetOrCreateEntry(key string) *DeduplicationEntry {
+// Returns the entry and a boolean indicating if this caller is the owner (should make the request)
+func (dt *DeduplicationTracker) GetOrCreateEntry(key string) (*DeduplicationEntry, bool) {
 	dt.mu.Lock()
 	defer dt.mu.Unlock()
 
@@ -42,7 +43,7 @@ func (dt *DeduplicationTracker) GetOrCreateEntry(key string) *DeduplicationEntry
 		entry.mu.Lock()
 		entry.waiters++
 		entry.mu.Unlock()
-		return entry
+		return entry, false // not the owner
 	}
 
 	entry := &DeduplicationEntry{
@@ -50,7 +51,7 @@ func (dt *DeduplicationTracker) GetOrCreateEntry(key string) *DeduplicationEntry
 		waiters: 1,
 	}
 	dt.entries[key] = entry
-	return entry
+	return entry, true // is the owner
 }
 
 // Complete marks the entry as completed with the given response and error
@@ -79,15 +80,6 @@ func (dt *DeduplicationTracker) Complete(key string, resp *http.Response, err er
 
 // Wait waits for the entry to complete and returns the response and error
 func (entry *DeduplicationEntry) Wait(ctx context.Context) (*http.Response, error) {
-	entry.mu.Lock()
-	waiters := entry.waiters
-	entry.mu.Unlock()
-
-	// If this is the first waiter (the actual request), don't wait
-	if waiters == 1 {
-		return nil, nil
-	}
-
 	select {
 	case <-entry.done:
 		entry.mu.Lock()
