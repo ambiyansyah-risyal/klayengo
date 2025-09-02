@@ -183,3 +183,24 @@ func WithRequestIDGenerator(gen func() string) Option {
 		c.debug.RequestIDGen = gen
 	}
 }
+
+// WithDeduplication enables request deduplication
+func WithDeduplication() Option {
+	return func(c *Client) {
+		c.deduplication = NewDeduplicationTracker()
+	}
+}
+
+// WithDeduplicationKeyFunc sets a custom deduplication key function
+func WithDeduplicationKeyFunc(fn DeduplicationKeyFunc) Option {
+	return func(c *Client) {
+		c.dedupKeyFunc = fn
+	}
+}
+
+// WithDeduplicationCondition sets a custom deduplication condition function
+func WithDeduplicationCondition(fn DeduplicationCondition) Option {
+	return func(c *Client) {
+		c.dedupCondition = fn
+	}
+}

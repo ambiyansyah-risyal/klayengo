@@ -29,6 +29,9 @@ type Client struct {
 	metrics           *MetricsCollector
 	debug             *DebugConfig
 	logger            Logger
+	deduplication     *DeduplicationTracker
+	dedupKeyFunc      DeduplicationKeyFunc
+	dedupCondition    DeduplicationCondition
 }
 
 // New creates a new retry client with default options
@@ -54,6 +57,9 @@ func New(options ...Option) *Client {
 		metrics:           nil, // No metrics by default
 		debug:             DefaultDebugConfig(),
 		logger:            nil, // No logging by default
+		deduplication:     nil, // No deduplication by default
+		dedupKeyFunc:      DefaultDeduplicationKeyFunc,
+		dedupCondition:    DefaultDeduplicationCondition,
 	}
 
 	for _, option := range options {
@@ -101,6 +107,42 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	// Record request start
 	if c.metrics != nil {
 		c.metrics.RecordRequestStart(req.Method, endpoint)
+	}
+
+	// Check if deduplication is enabled for this request
+	dedupEnabled := c.deduplication != nil && c.dedupCondition(req)
+
+	var dedupEntry *DeduplicationEntry
+	var isDedupOwner bool
+	if dedupEnabled {
+		dedupKey := c.dedupKeyFunc(req)
+		dedupEntry, isDedupOwner = c.deduplication.GetOrCreateEntry(dedupKey)
+
+		// If this is not the owner, wait for the result
+		if !isDedupOwner {
+			resp, err := dedupEntry.Wait(req.Context())
+			duration := time.Since(start)
+			if c.metrics != nil {
+				statusCode := 0
+				if resp != nil {
+					statusCode = resp.StatusCode
+				}
+				c.metrics.RecordRequest(req.Method, endpoint, statusCode, duration)
+				c.metrics.RecordDeduplicationHit(req.Method, endpoint)
+			}
+
+			// Debug logging
+			if c.debug != nil && c.debug.Enabled && c.logger != nil {
+				c.logger.Debug("Deduplication hit", "requestID", requestID, "dedupKey", dedupKey)
+			}
+
+			return resp, err
+		}
+
+		// Debug logging for owner
+		if c.debug != nil && c.debug.Enabled && c.logger != nil {
+			c.logger.Debug("Deduplication miss - proceeding with request", "requestID", requestID, "dedupKey", dedupKey)
+		}
 	}
 
 	// Check if caching is enabled for this request
@@ -183,6 +225,12 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 		if c.debug != nil && c.debug.Enabled && c.debug.LogCache && c.logger != nil {
 			c.logger.Debug("Response cached", "requestID", requestID, "cacheKey", cacheKey, "ttl", ttl)
 		}
+	}
+
+	// Complete deduplication if enabled and this was the owner
+	if dedupEnabled && isDedupOwner && dedupEntry != nil {
+		dedupKey := c.dedupKeyFunc(req)
+		c.deduplication.Complete(dedupKey, resp, err)
 	}
 
 	return resp, err

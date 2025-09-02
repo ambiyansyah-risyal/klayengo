@@ -94,6 +94,26 @@ func TestClientErrorDebugInfo(t *testing.T) {
 	}
 }
 
+func TestClientErrorDebugInfoWithStatusCode(t *testing.T) {
+	err := &ClientError{
+		Type:       "ServerError",
+		Message:    "internal server error",
+		RequestID:  "req_789",
+		Method:     "POST",
+		URL:        "https://api.example.com/submit",
+		Attempt:    1,
+		MaxRetries: 3,
+		StatusCode: 500, // This should trigger the StatusCode branch
+		Endpoint:   "api.example.com/submit",
+		Cause:      errors.New("server returned 500"),
+	}
+
+	debugInfo := err.DebugInfo()
+	if !strings.Contains(debugInfo, "Status Code: 500") {
+		t.Error("DebugInfo should contain status code when > 0")
+	}
+}
+
 func TestClientErrorUnwrap(t *testing.T) {
 	cause := errors.New("original error")
 	err := &ClientError{

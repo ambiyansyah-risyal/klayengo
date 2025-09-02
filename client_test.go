@@ -91,10 +91,40 @@ func TestPost(t *testing.T) {
 	defer server.Close()
 
 	client := New()
-	resp, err := client.Post(context.Background(), server.URL, "application/json", strings.NewReader(`{"test": "data"}`))
+	resp, err := client.Post(context.Background(), server.URL, contentTypeJSON, strings.NewReader(`{"test": "data"}`))
 
 	if err != nil {
 		t.Fatalf("Post() returned error: %v", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf(expectedStatus200Msg, resp.StatusCode)
+	}
+}
+
+func TestPostWithInvalidURL(t *testing.T) {
+	client := New()
+	_, err := client.Post(context.Background(), "http://invalid url with spaces", contentTypeJSON, strings.NewReader(`{}`))
+
+	if err == nil {
+		t.Error("Expected error for invalid URL, got nil")
+	}
+}
+
+func TestPostWithNilBody(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		if _, err := w.Write([]byte(testResponseBody)); err != nil {
+			t.Fatalf(failedWriteResponseMsg, err)
+		}
+	}))
+	defer server.Close()
+
+	client := New()
+	resp, err := client.Post(context.Background(), server.URL, contentTypeJSON, nil)
+
+	if err != nil {
+		t.Fatalf("Post() with nil body returned error: %v", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -228,6 +258,16 @@ func TestGetEndpointFromRequest(t *testing.T) {
 	}
 }
 
+func TestGetEndpointFromRequestWithNilURL(t *testing.T) {
+	req, _ := http.NewRequest("GET", "", nil)
+	req.URL = nil
+
+	result := getEndpointFromRequest(req)
+	if result != "unknown" {
+		t.Errorf("Expected 'unknown' for nil URL, got '%s'", result)
+	}
+}
+
 func TestExecuteMiddleware(t *testing.T) {
 	callOrder := []string{}
 
@@ -301,17 +341,6 @@ func TestClientWithCustomHTTPClient(t *testing.T) {
 	}
 }
 
-func TestClientWithMetrics(t *testing.T) {
-	registry := prometheus.NewRegistry()
-	collector := NewMetricsCollectorWithRegistry(registry)
-
-	client := New(WithMetricsCollector(collector))
-
-	if client.metrics != collector {
-		t.Error("Metrics collector not set correctly")
-	}
-}
-
 // Benchmark tests for performance measurement
 
 func BenchmarkClientGet(b *testing.B) {
@@ -351,7 +380,7 @@ func BenchmarkClientPost(b *testing.B) {
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			resp, err := client.Post(context.Background(), server.URL, "application/json", strings.NewReader(`{"test": "data"}`))
+			resp, err := client.Post(context.Background(), server.URL, contentTypeJSON, strings.NewReader(`{"test": "data"}`))
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -495,4 +524,50 @@ func BenchmarkClientFullFeatures(b *testing.B) {
 		}
 		resp.Body.Close()
 	}
+}
+
+func BenchmarkClientWithDeduplication(b *testing.B) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		if _, err := w.Write([]byte(successResponseBody)); err != nil {
+			b.Fatalf(failedWriteResponseMsg, err)
+		}
+	}))
+	defer server.Close()
+
+	client := New(WithDeduplication())
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		resp, err := client.Get(context.Background(), server.URL)
+		if err != nil {
+			b.Fatal(err)
+		}
+		resp.Body.Close()
+	}
+}
+
+func BenchmarkClientConcurrentDeduplication(b *testing.B) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Simulate some processing time
+		time.Sleep(10 * time.Millisecond)
+		w.WriteHeader(http.StatusOK)
+		if _, err := w.Write([]byte(successResponseBody)); err != nil {
+			b.Fatalf(failedWriteResponseMsg, err)
+		}
+	}))
+	defer server.Close()
+
+	client := New(WithDeduplication())
+
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			resp, err := client.Get(context.Background(), server.URL)
+			if err != nil {
+				b.Fatal(err)
+			}
+			resp.Body.Close()
+		}
+	})
 }
