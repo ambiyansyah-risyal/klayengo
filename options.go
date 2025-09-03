@@ -1,6 +1,7 @@
 package klayengo
 
 import (
+	"fmt"
 	"net/http"
 	"time"
 )
@@ -203,4 +204,162 @@ func WithDeduplicationCondition(fn DeduplicationCondition) Option {
 	return func(c *Client) {
 		c.dedupCondition = fn
 	}
+}
+
+// ValidateConfiguration validates the client configuration and returns an error if invalid
+func (c *Client) ValidateConfiguration() error {
+	var errors []string
+
+	// Validate each configuration section
+	errors = append(errors, c.validateRetryConfig()...)
+	errors = append(errors, c.validateRateLimiterConfig()...)
+	errors = append(errors, c.validateCacheConfig()...)
+	errors = append(errors, c.validateCircuitBreakerConfig()...)
+	errors = append(errors, c.validateDebugConfig()...)
+	errors = append(errors, c.validateDeduplicationConfig()...)
+	errors = append(errors, c.validateMiddlewareConfig()...)
+	errors = append(errors, c.validateHTTPClientConfig()...)
+
+	if len(errors) > 0 {
+		return &ClientError{
+			Type:    ErrorTypeValidation,
+			Message: "configuration validation failed",
+			Cause:   fmt.Errorf("validation errors: %v", errors),
+		}
+	}
+
+	return nil
+}
+
+// validateRetryConfig validates retry-related configuration
+func (c *Client) validateRetryConfig() []string {
+	var errors []string
+
+	if c.maxRetries < 0 {
+		errors = append(errors, "maxRetries must be non-negative")
+	}
+
+	if c.initialBackoff <= 0 {
+		errors = append(errors, "initialBackoff must be positive")
+	}
+
+	if c.maxBackoff < c.initialBackoff {
+		errors = append(errors, "maxBackoff must be greater than or equal to initialBackoff")
+	}
+
+	if c.backoffMultiplier <= 0 {
+		errors = append(errors, "backoffMultiplier must be positive")
+	}
+
+	if c.jitter < 0 || c.jitter > 1 {
+		errors = append(errors, "jitter must be between 0 and 1")
+	}
+
+	if c.timeout <= 0 {
+		errors = append(errors, "timeout must be positive")
+	}
+
+	return errors
+}
+
+// validateRateLimiterConfig validates rate limiter configuration
+func (c *Client) validateRateLimiterConfig() []string {
+	var errors []string
+
+	if c.rateLimiter != nil {
+		if c.rateLimiter.maxTokens <= 0 {
+			errors = append(errors, "rateLimiter maxTokens must be positive")
+		}
+		if c.rateLimiter.refillRate <= 0 {
+			errors = append(errors, "rateLimiter refillRate must be positive")
+		}
+	}
+
+	return errors
+}
+
+// validateCacheConfig validates cache configuration
+func (c *Client) validateCacheConfig() []string {
+	var errors []string
+
+	if c.cache != nil && c.cacheTTL <= 0 {
+		errors = append(errors, "cacheTTL must be positive when cache is enabled")
+	}
+
+	return errors
+}
+
+// validateCircuitBreakerConfig validates circuit breaker configuration
+func (c *Client) validateCircuitBreakerConfig() []string {
+	var errors []string
+
+	if c.circuitBreaker != nil {
+		if c.circuitBreaker.config.FailureThreshold <= 0 {
+			errors = append(errors, "circuitBreaker FailureThreshold must be positive")
+		}
+		if c.circuitBreaker.config.RecoveryTimeout <= 0 {
+			errors = append(errors, "circuitBreaker RecoveryTimeout must be positive")
+		}
+		if c.circuitBreaker.config.SuccessThreshold <= 0 {
+			errors = append(errors, "circuitBreaker SuccessThreshold must be positive")
+		}
+	}
+
+	return errors
+}
+
+// validateDebugConfig validates debug configuration
+func (c *Client) validateDebugConfig() []string {
+	var errors []string
+
+	if c.debug != nil && c.debug.Enabled {
+		if c.debug.RequestIDGen == nil {
+			errors = append(errors, "debug RequestIDGen must be set when debug is enabled")
+		}
+		if c.logger == nil {
+			errors = append(errors, "logger must be set when debug is enabled")
+		}
+	}
+
+	return errors
+}
+
+// validateDeduplicationConfig validates deduplication configuration
+func (c *Client) validateDeduplicationConfig() []string {
+	var errors []string
+
+	if c.deduplication != nil {
+		if c.dedupKeyFunc == nil {
+			errors = append(errors, "deduplication key function must be set when deduplication is enabled")
+		}
+		if c.dedupCondition == nil {
+			errors = append(errors, "deduplication condition must be set when deduplication is enabled")
+		}
+	}
+
+	return errors
+}
+
+// validateMiddlewareConfig validates middleware configuration
+func (c *Client) validateMiddlewareConfig() []string {
+	var errors []string
+
+	for i, middleware := range c.middleware {
+		if middleware == nil {
+			errors = append(errors, fmt.Sprintf("middleware[%d] cannot be nil", i))
+		}
+	}
+
+	return errors
+}
+
+// validateHTTPClientConfig validates HTTP client configuration
+func (c *Client) validateHTTPClientConfig() []string {
+	var errors []string
+
+	if c.httpClient == nil {
+		errors = append(errors, "HTTP client cannot be nil")
+	}
+
+	return errors
 }

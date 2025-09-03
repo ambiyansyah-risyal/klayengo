@@ -32,6 +32,7 @@ type Client struct {
 	deduplication     *DeduplicationTracker
 	dedupKeyFunc      DeduplicationKeyFunc
 	dedupCondition    DeduplicationCondition
+	validationError   error // Stores validation error if configuration is invalid
 }
 
 // New creates a new retry client with default options
@@ -64,6 +65,13 @@ func New(options ...Option) *Client {
 
 	for _, option := range options {
 		option(client)
+	}
+
+	// Validate configuration after applying all options
+	if err := client.ValidateConfiguration(); err != nil {
+		// Return a client with validation error for backward compatibility
+		// The error will be accessible via a method or field if needed
+		client.validationError = err
 	}
 
 	return client
@@ -478,9 +486,16 @@ func (c *Client) calculateBackoff(attempt int) time.Duration {
 	if backoff > c.maxBackoff {
 		backoff = c.maxBackoff
 	}
-	// Add jitter
-	if c.jitter > 0 {
-		jitterAmount := time.Duration(float64(backoff) * c.jitter * rand.Float64())
+	// Add jitter (clamp to valid range)
+	jitter := c.jitter
+	if jitter < 0 {
+		jitter = 0
+	}
+	if jitter > 1 {
+		jitter = 1
+	}
+	if jitter > 0 {
+		jitterAmount := time.Duration(float64(backoff) * jitter * rand.Float64())
 		backoff += jitterAmount
 	}
 	return backoff
@@ -530,6 +545,16 @@ func (c *Client) createClientError(errorType, message string, cause error, reque
 		StatusCode: statusCode,
 		Endpoint:   endpoint,
 	}
+}
+
+// IsValid returns true if the client configuration is valid
+func (c *Client) IsValid() bool {
+	return c.validationError == nil
+}
+
+// ValidationError returns the validation error if the configuration is invalid, nil otherwise
+func (c *Client) ValidationError() error {
+	return c.validationError
 }
 
 // getEndpointFromRequest extracts a simplified endpoint from the request for metrics
