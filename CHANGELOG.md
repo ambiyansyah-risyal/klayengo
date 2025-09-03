@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.1.0] - 2025-09-03
+
+### Added
+- Release v1.1.0
+
+### Changed
+- Version bump to v1.1.0
+
+
 ### Added
 - **Request Deduplication**: Prevents duplicate concurrent requests by deduplicating identical in-flight requests
   - Automatic deduplication of concurrent identical requests
