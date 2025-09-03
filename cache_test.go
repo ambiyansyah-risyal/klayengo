@@ -20,6 +20,8 @@ const keyFormat = "key-%d"
 const contentTypeHeader = "Content-Type"
 const testResponse = "test response"
 const writeResponseErrorMsg = "Failed to write response: %v"
+const expectedFormatMsg = "Expected '%s', got '%s'"
+const expectedContentTypeFormatMsg = "Expected Content-Type '%s', got '%s'"
 
 // errorReader is a mock reader that always returns an error
 type errorReader struct {
@@ -75,7 +77,7 @@ func TestInMemoryCacheGet(t *testing.T) {
 	}
 
 	if string(retrieved.Body) != testData {
-		t.Errorf("Expected '%s', got '%s'", testData, string(retrieved.Body))
+		t.Errorf(expectedFormatMsg, testData, string(retrieved.Body))
 	}
 
 	if retrieved.StatusCode != 200 {
@@ -200,8 +202,8 @@ func TestCreateResponseFromCache(t *testing.T) {
 		t.Errorf("Expected 'cached response', got '%s'", string(body))
 	}
 
-	if resp.Header.Get("Content-Type") != "application/json" {
-		t.Errorf("Expected Content-Type 'application/json', got '%s'", resp.Header.Get("Content-Type"))
+	if resp.Header.Get(contentTypeHeader) != contentTypeJSON {
+		t.Errorf(expectedContentTypeMsg, resp.Header.Get(contentTypeHeader))
 	}
 }
 
@@ -225,11 +227,11 @@ func TestCreateCacheEntry(t *testing.T) {
 	}
 
 	if string(entry.Body) != testResponse {
-		t.Errorf("Expected '%s', got '%s'", testResponse, string(entry.Body))
+		t.Errorf(expectedFormatMsg, testResponse, string(entry.Body))
 	}
 
 	if entry.Header.Get(contentTypeHeader) != contentTypeJSON {
-		t.Errorf("Expected Content-Type '%s', got '%s'", contentTypeJSON, entry.Header.Get(contentTypeHeader))
+		t.Errorf(expectedContentTypeFormatMsg, contentTypeJSON, entry.Header.Get(contentTypeHeader))
 	}
 
 	// Verify original response body is restored
@@ -268,7 +270,7 @@ func TestDefaultCacheKeyFunc(t *testing.T) {
 
 	expected := "GET:" + testCacheURL + "/api/data?id=123"
 	if key != expected {
-		t.Errorf("Expected '%s', got '%s'", expected, key)
+		t.Errorf(expectedFormatMsg, expected, key)
 	}
 }
 
@@ -280,7 +282,7 @@ func TestDefaultCacheKeyFuncWithNilURL(t *testing.T) {
 
 	expected := "GET:"
 	if key != expected {
-		t.Errorf("Expected '%s', got '%s'", expected, key)
+		t.Errorf(expectedFormatMsg, expected, key)
 	}
 }
 
@@ -389,7 +391,7 @@ func TestCachingInDo(t *testing.T) {
 	callCount := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		callCount++
-		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set(contentTypeHeader, contentTypeJSON)
 		w.WriteHeader(http.StatusOK)
 
 		if _, err := w.Write([]byte(`{"data": "test"}`)); err != nil {
@@ -516,13 +518,13 @@ func TestCacheWithCustomCondition(t *testing.T) {
 	}
 
 	// POST request should be cached
-	resp3, err := client.Post(context.Background(), server.URL, "application/json", bytes.NewReader([]byte("{}")))
+	resp3, err := client.Post(context.Background(), server.URL, contentTypeJSON, bytes.NewReader([]byte("{}")))
 	if err != nil {
 		t.Fatalf("POST request failed: %v", err)
 	}
 	resp3.Body.Close()
 
-	resp4, err := client.Post(context.Background(), server.URL, "application/json", bytes.NewReader([]byte("{}")))
+	resp4, err := client.Post(context.Background(), server.URL, contentTypeJSON, bytes.NewReader([]byte("{}")))
 	if err != nil {
 		t.Fatalf("Second POST request failed: %v", err)
 	}

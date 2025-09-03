@@ -93,6 +93,31 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	start := time.Now()
 	endpoint := getEndpointFromRequest(req)
 
+	// Initialize request context
+	requestID := c.initializeRequest(req, endpoint)
+
+	// Handle deduplication if enabled
+	dedupResp, dedupHandled, dedupInfo, dedupErr := c.handleDeduplication(req, requestID, endpoint, start)
+	if dedupHandled {
+		return dedupResp, dedupErr
+	}
+
+	// Handle cache lookup if enabled
+	if cachedResp, handled := c.handleCacheLookup(req, requestID, endpoint, start); handled {
+		return cachedResp, nil
+	}
+
+	// Execute the request with retry logic
+	resp, err := c.doWithRetry(req, 0, requestID, start)
+
+	// Finalize request with metrics and cleanup
+	c.finalizeRequest(req, resp, err, requestID, endpoint, start, dedupInfo)
+
+	return resp, err
+}
+
+// initializeRequest sets up request tracing and initial logging
+func (c *Client) initializeRequest(req *http.Request, endpoint string) string {
 	// Generate request ID for tracing
 	requestID := ""
 	if c.debug != nil && c.debug.RequestIDGen != nil {
@@ -109,83 +134,93 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 		c.metrics.RecordRequestStart(req.Method, endpoint)
 	}
 
-	// Check if deduplication is enabled for this request
+	return requestID
+}
+
+// handleDeduplication manages request deduplication logic
+func (c *Client) handleDeduplication(req *http.Request, requestID, endpoint string, start time.Time) (*http.Response, bool, deduplicationInfo, error) {
 	dedupEnabled := c.deduplication != nil && c.dedupCondition(req)
-
-	var dedupEntry *DeduplicationEntry
-	var isDedupOwner bool
-	if dedupEnabled {
-		dedupKey := c.dedupKeyFunc(req)
-		dedupEntry, isDedupOwner = c.deduplication.GetOrCreateEntry(dedupKey)
-
-		// If this is not the owner, wait for the result
-		if !isDedupOwner {
-			resp, err := dedupEntry.Wait(req.Context())
-			duration := time.Since(start)
-			if c.metrics != nil {
-				statusCode := 0
-				if resp != nil {
-					statusCode = resp.StatusCode
-				}
-				c.metrics.RecordRequest(req.Method, endpoint, statusCode, duration)
-				c.metrics.RecordDeduplicationHit(req.Method, endpoint)
-			}
-
-			// Debug logging
-			if c.debug != nil && c.debug.Enabled && c.logger != nil {
-				c.logger.Debug("Deduplication hit", "requestID", requestID, "dedupKey", dedupKey)
-			}
-
-			return resp, err
-		}
-
-		// Debug logging for owner
-		if c.debug != nil && c.debug.Enabled && c.logger != nil {
-			c.logger.Debug("Deduplication miss - proceeding with request", "requestID", requestID, "dedupKey", dedupKey)
-		}
+	if !dedupEnabled {
+		return nil, false, deduplicationInfo{}, nil
 	}
 
-	// Check if caching is enabled for this request
-	cacheEnabled := c.cache != nil && c.cacheCondition(req)
+	dedupKey := c.dedupKeyFunc(req)
+	dedupEntry, isDedupOwner := c.deduplication.GetOrCreateEntry(dedupKey)
 
-	// Check cache first if enabled
-	if cacheEnabled {
-		cacheKey := c.cacheKeyFunc(req)
-		if entry, found := c.cache.Get(cacheKey); found {
-			// Debug logging
-			if c.debug != nil && c.debug.Enabled && c.debug.LogCache && c.logger != nil {
-				c.logger.Debug("Cache hit", "requestID", requestID, "cacheKey", cacheKey)
-			}
+	// If this is not the owner, wait for the result
+	if !isDedupOwner {
+		resp, err := dedupEntry.Wait(req.Context())
+		duration := time.Since(start)
 
-			// Record cache hit
-			if c.metrics != nil {
-				c.metrics.RecordCacheHit(req.Method, endpoint)
-			}
-
-			// Record request end and metrics
-			duration := time.Since(start)
-			if c.metrics != nil {
-				c.metrics.RecordRequestEnd(req.Method, endpoint)
-				c.metrics.RecordRequest(req.Method, endpoint, entry.StatusCode, duration)
-			}
-
-			// Return cached response
-			return c.createResponseFromCache(entry), nil
-		}
-		// Record cache miss
 		if c.metrics != nil {
-			c.metrics.RecordCacheMiss(req.Method, endpoint)
+			statusCode := 0
+			if resp != nil {
+				statusCode = resp.StatusCode
+			}
+			c.metrics.RecordRequest(req.Method, endpoint, statusCode, duration)
+			c.metrics.RecordDeduplicationHit(req.Method, endpoint)
 		}
 
 		// Debug logging
-		if c.debug != nil && c.debug.Enabled && c.debug.LogCache && c.logger != nil {
-			cacheKey := c.cacheKeyFunc(req)
-			c.logger.Debug("Cache miss", "requestID", requestID, "cacheKey", cacheKey)
+		if c.debug != nil && c.debug.Enabled && c.logger != nil {
+			c.logger.Debug("Deduplication hit", "requestID", requestID, "dedupKey", dedupKey)
 		}
+
+		return resp, true, deduplicationInfo{key: dedupKey, isOwner: false}, err
 	}
 
-	resp, err := c.doWithRetry(req, 0, requestID, start)
+	// Debug logging for owner
+	if c.debug != nil && c.debug.Enabled && c.logger != nil {
+		c.logger.Debug("Deduplication miss - proceeding with request", "requestID", requestID, "dedupKey", dedupKey)
+	}
 
+	return nil, false, deduplicationInfo{key: dedupKey, isOwner: true}, nil
+}
+
+// handleCacheLookup checks cache for existing response
+func (c *Client) handleCacheLookup(req *http.Request, requestID, endpoint string, start time.Time) (*http.Response, bool) {
+	cacheEnabled := c.cache != nil && c.cacheCondition(req)
+	if !cacheEnabled {
+		return nil, false
+	}
+
+	cacheKey := c.cacheKeyFunc(req)
+	if entry, found := c.cache.Get(cacheKey); found {
+		// Debug logging
+		if c.debug != nil && c.debug.Enabled && c.debug.LogCache && c.logger != nil {
+			c.logger.Debug("Cache hit", "requestID", requestID, "cacheKey", cacheKey)
+		}
+
+		// Record cache hit
+		if c.metrics != nil {
+			c.metrics.RecordCacheHit(req.Method, endpoint)
+		}
+
+		// Record request end and metrics
+		duration := time.Since(start)
+		if c.metrics != nil {
+			c.metrics.RecordRequestEnd(req.Method, endpoint)
+			c.metrics.RecordRequest(req.Method, endpoint, entry.StatusCode, duration)
+		}
+
+		return c.createResponseFromCache(entry), true
+	}
+
+	// Record cache miss
+	if c.metrics != nil {
+		c.metrics.RecordCacheMiss(req.Method, endpoint)
+	}
+
+	// Debug logging
+	if c.debug != nil && c.debug.Enabled && c.debug.LogCache && c.logger != nil {
+		c.logger.Debug("Cache miss", "requestID", requestID, "cacheKey", cacheKey)
+	}
+
+	return nil, false
+}
+
+// finalizeRequest handles final metrics recording and cleanup
+func (c *Client) finalizeRequest(req *http.Request, resp *http.Response, err error, requestID, endpoint string, start time.Time, dedupInfo deduplicationInfo) {
 	// Record request end
 	if c.metrics != nil {
 		c.metrics.RecordRequestEnd(req.Method, endpoint)
@@ -202,38 +237,49 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	}
 
 	// Cache successful responses if caching is enabled
-	if cacheEnabled && err == nil && resp.StatusCode < 400 {
-		cacheKey := c.cacheKeyFunc(req)
-		entry := c.createCacheEntry(resp)
-		ttl := c.getCacheTTLForRequest(req)
-		c.cache.Set(cacheKey, entry, ttl)
-
-		// Update cache size metric
-		if inMemoryCache, ok := c.cache.(*InMemoryCache); ok {
-			totalSize := 0
-			for _, shard := range inMemoryCache.shards {
-				shard.mu.RLock()
-				totalSize += len(shard.store)
-				shard.mu.RUnlock()
-			}
-			if c.metrics != nil {
-				c.metrics.RecordCacheSize("default", totalSize)
-			}
-		}
-
-		// Debug logging
-		if c.debug != nil && c.debug.Enabled && c.debug.LogCache && c.logger != nil {
-			c.logger.Debug("Response cached", "requestID", requestID, "cacheKey", cacheKey, "ttl", ttl)
-		}
-	}
+	c.handleCacheStorage(req, resp, err, requestID, endpoint)
 
 	// Complete deduplication if enabled and this was the owner
-	if dedupEnabled && isDedupOwner && dedupEntry != nil {
-		dedupKey := c.dedupKeyFunc(req)
-		c.deduplication.Complete(dedupKey, resp, err)
+	if dedupInfo.key != "" && dedupInfo.isOwner {
+		c.deduplication.Complete(dedupInfo.key, resp, err)
+	}
+}
+
+// deduplicationInfo holds deduplication state information
+type deduplicationInfo struct {
+	key     string
+	isOwner bool
+}
+
+// handleCacheStorage stores successful responses in cache
+func (c *Client) handleCacheStorage(req *http.Request, resp *http.Response, err error, requestID, endpoint string) {
+	cacheEnabled := c.cache != nil && c.cacheCondition(req)
+	if !cacheEnabled || err != nil || resp == nil || resp.StatusCode >= 400 {
+		return
 	}
 
-	return resp, err
+	cacheKey := c.cacheKeyFunc(req)
+	entry := c.createCacheEntry(resp)
+	ttl := c.getCacheTTLForRequest(req)
+	c.cache.Set(cacheKey, entry, ttl)
+
+	// Update cache size metric
+	if inMemoryCache, ok := c.cache.(*InMemoryCache); ok {
+		totalSize := 0
+		for _, shard := range inMemoryCache.shards {
+			shard.mu.RLock()
+			totalSize += len(shard.store)
+			shard.mu.RUnlock()
+		}
+		if c.metrics != nil {
+			c.metrics.RecordCacheSize("default", totalSize)
+		}
+	}
+
+	// Debug logging
+	if c.debug != nil && c.debug.Enabled && c.debug.LogCache && c.logger != nil {
+		c.logger.Debug("Response cached", "requestID", requestID, "endpoint", endpoint, "cacheKey", cacheKey, "ttl", ttl)
+	}
 }
 
 // doWithRetry executes the request with retry logic
@@ -241,102 +287,168 @@ func (c *Client) doWithRetry(req *http.Request, attempt int, requestID string, s
 	endpoint := getEndpointFromRequest(req)
 
 	// Check rate limiter
-	if c.rateLimiter != nil && !c.rateLimiter.Allow() {
-		// Debug logging
-		if c.debug != nil && c.debug.Enabled && c.debug.LogRateLimit && c.logger != nil {
-			c.logger.Warn("Rate limit exceeded", "requestID", requestID, "endpoint", endpoint)
-		}
-
-		if c.metrics != nil {
-			c.metrics.RecordError("RateLimit", req.Method, endpoint)
-		}
-		return nil, c.createClientError(ErrorTypeRateLimit, "rate limit exceeded", nil, requestID, req, attempt, time.Since(startTime))
-	}
-
-	// Record rate limiter tokens if rate limiter is enabled
-	if c.rateLimiter != nil && c.metrics != nil {
-		c.metrics.RecordRateLimiterTokens("default", int(c.rateLimiter.tokens))
+	if err := c.checkRateLimit(requestID, endpoint, req, attempt, startTime); err != nil {
+		return nil, err
 	}
 
 	// Check circuit breaker
-	if !c.circuitBreaker.Allow() {
-		// Debug logging
-		if c.debug != nil && c.debug.Enabled && c.debug.LogCircuit && c.logger != nil {
-			c.logger.Warn("Circuit breaker open", "requestID", requestID, "endpoint", endpoint, "state", c.circuitBreaker.state)
-		}
-
-		if c.metrics != nil {
-			c.metrics.RecordError("CircuitBreaker", req.Method, endpoint)
-		}
-		return nil, c.createClientError(ErrorTypeCircuitOpen, "circuit breaker is open", nil, requestID, req, attempt, time.Since(startTime))
+	if err := c.checkCircuitBreaker(requestID, endpoint, req, attempt, startTime); err != nil {
+		return nil, err
 	}
 
-	// Record retry attempt if not the first attempt
+	// Log retry attempt if not the first attempt
+	c.logRetryAttempt(attempt, requestID, endpoint)
+	if attempt > 0 && c.metrics != nil {
+		c.metrics.RecordRetry(req.Method, endpoint, attempt)
+	}
+
+	// Execute the request
+	resp, err := c.executeRequest(req)
+
+	// Handle circuit breaker state based on response
+	c.handleCircuitBreakerState(resp, err, requestID, endpoint, req)
+
+	// Check if retry is needed
+	if c.shouldRetry(attempt, resp, err) {
+		return c.performRetry(req, attempt, requestID, startTime, endpoint)
+	}
+
+	// Return final result or wrap error
+	return c.finalizeAttempt(resp, err, req, attempt, startTime, requestID)
+}
+
+// checkRateLimit checks if the request should be rate limited
+func (c *Client) checkRateLimit(requestID, endpoint string, req *http.Request, attempt int, startTime time.Time) error {
+	if c.rateLimiter == nil || c.rateLimiter.Allow() {
+		// Record rate limiter tokens if rate limiter is enabled
+		if c.rateLimiter != nil && c.metrics != nil {
+			c.metrics.RecordRateLimiterTokens("default", int(c.rateLimiter.tokens))
+		}
+		return nil
+	}
+
+	// Debug logging
+	if c.debug != nil && c.debug.Enabled && c.debug.LogRateLimit && c.logger != nil {
+		c.logger.Warn("Rate limit exceeded", "requestID", requestID, "endpoint", endpoint)
+	}
+
+	if c.metrics != nil {
+		c.metrics.RecordError("RateLimit", req.Method, endpoint)
+	}
+	return c.createClientError(ErrorTypeRateLimit, "rate limit exceeded", nil, requestID, req, attempt, time.Since(startTime))
+}
+
+// checkCircuitBreaker checks if the circuit breaker allows the request
+func (c *Client) checkCircuitBreaker(requestID, endpoint string, req *http.Request, attempt int, startTime time.Time) error {
+	if c.circuitBreaker.Allow() {
+		return nil
+	}
+
+	// Debug logging
+	if c.debug != nil && c.debug.Enabled && c.debug.LogCircuit && c.logger != nil {
+		c.logger.Warn("Circuit breaker open", "requestID", requestID, "endpoint", endpoint, "state", c.circuitBreaker.state)
+	}
+
+	if c.metrics != nil {
+		c.metrics.RecordError("CircuitBreaker", req.Method, endpoint)
+	}
+	return c.createClientError(ErrorTypeCircuitOpen, "circuit breaker is open", nil, requestID, req, attempt, time.Since(startTime))
+}
+
+// logRetryAttempt logs retry attempt information
+func (c *Client) logRetryAttempt(attempt int, requestID, endpoint string) {
 	if attempt > 0 {
 		// Debug logging
 		if c.debug != nil && c.debug.Enabled && c.debug.LogRetries && c.logger != nil {
 			c.logger.Info("Retry attempt", "requestID", requestID, "attempt", attempt, "maxRetries", c.maxRetries, "endpoint", endpoint)
 		}
-
-		if c.metrics != nil {
-			c.metrics.RecordRetry(req.Method, endpoint, attempt)
-		}
 	}
+}
 
-	// Execute middleware chain
-	resp, err := c.executeMiddleware(req)
+// executeRequest executes the HTTP request through middleware
+func (c *Client) executeRequest(req *http.Request) (*http.Response, error) {
+	return c.executeMiddleware(req)
+}
 
-	// Handle circuit breaker
-	if err != nil || (resp != nil && resp.StatusCode >= 500) {
-		c.circuitBreaker.RecordFailure()
-		if c.metrics != nil {
-			c.metrics.RecordCircuitBreakerState("default", CircuitState(c.circuitBreaker.state))
-		}
-
-		// Debug logging
-		if c.debug != nil && c.debug.Enabled && c.debug.LogCircuit && c.logger != nil {
-			if err != nil {
-				c.logger.Warn("Circuit breaker failure recorded", "requestID", requestID, "error", err.Error())
-			} else {
-				c.logger.Warn("Circuit breaker failure recorded", "requestID", requestID, "statusCode", resp.StatusCode)
-			}
-		}
-
-		if err != nil {
-			if c.metrics != nil {
-				c.metrics.RecordError("Network", req.Method, endpoint)
-			}
-		} else {
-			if c.metrics != nil {
-				c.metrics.RecordError("Server", req.Method, endpoint)
-			}
-		}
+// handleCircuitBreakerState updates circuit breaker state based on response
+func (c *Client) handleCircuitBreakerState(resp *http.Response, err error, requestID, endpoint string, req *http.Request) {
+	if c.isFailureResponse(resp, err) {
+		c.recordCircuitBreakerFailure(resp, err, requestID, endpoint, req)
 	} else {
-		c.circuitBreaker.RecordSuccess()
-		if c.metrics != nil {
-			c.metrics.RecordCircuitBreakerState("default", CircuitState(c.circuitBreaker.state))
+		c.recordCircuitBreakerSuccess()
+	}
+}
+
+// isFailureResponse determines if the response indicates a failure
+func (c *Client) isFailureResponse(resp *http.Response, err error) bool {
+	return err != nil || (resp != nil && resp.StatusCode >= 500)
+}
+
+// recordCircuitBreakerFailure handles circuit breaker failure recording
+func (c *Client) recordCircuitBreakerFailure(resp *http.Response, err error, requestID, endpoint string, req *http.Request) {
+	c.circuitBreaker.RecordFailure()
+	if c.metrics != nil {
+		c.metrics.RecordCircuitBreakerState("default", CircuitState(c.circuitBreaker.state))
+	}
+
+	// Debug logging
+	if c.debug != nil && c.debug.Enabled && c.debug.LogCircuit && c.logger != nil {
+		if err != nil {
+			c.logger.Warn("Circuit breaker failure recorded", "requestID", requestID, "error", err.Error())
+		} else {
+			c.logger.Warn("Circuit breaker failure recorded", "requestID", requestID, "statusCode", resp.StatusCode)
 		}
 	}
 
-	// Check if retry is needed
-	if attempt < c.maxRetries && c.retryCondition(resp, err) {
-		backoff := c.calculateBackoff(attempt)
+	// Record error metrics
+	c.recordErrorMetrics(err, resp, req.Method, endpoint)
+}
 
-		// Debug logging
-		if c.debug != nil && c.debug.Enabled && c.debug.LogRetries && c.logger != nil {
-			c.logger.Info("Scheduling retry", "requestID", requestID, "attempt", attempt+1, "backoff", backoff, "endpoint", endpoint)
-		}
+// recordCircuitBreakerSuccess handles circuit breaker success recording
+func (c *Client) recordCircuitBreakerSuccess() {
+	c.circuitBreaker.RecordSuccess()
+	if c.metrics != nil {
+		c.metrics.RecordCircuitBreakerState("default", CircuitState(c.circuitBreaker.state))
+	}
+}
 
-		time.Sleep(backoff)
-		return c.doWithRetry(req, attempt+1, requestID, startTime)
+// recordErrorMetrics records appropriate error metrics based on error type
+func (c *Client) recordErrorMetrics(err error, resp *http.Response, method, endpoint string) {
+	if c.metrics == nil {
+		return
 	}
 
-	// If there's an error, wrap it with enhanced context
+	if err != nil {
+		c.metrics.RecordError("Network", method, endpoint)
+	} else if resp != nil {
+		c.metrics.RecordError("Server", method, endpoint)
+	}
+}
+
+// shouldRetry determines if the request should be retried
+func (c *Client) shouldRetry(attempt int, resp *http.Response, err error) bool {
+	return attempt < c.maxRetries && c.retryCondition(resp, err)
+}
+
+// performRetry handles the retry logic with backoff
+func (c *Client) performRetry(req *http.Request, attempt int, requestID string, startTime time.Time, endpoint string) (*http.Response, error) {
+	backoff := c.calculateBackoff(attempt)
+
+	// Debug logging
+	if c.debug != nil && c.debug.Enabled && c.debug.LogRetries && c.logger != nil {
+		c.logger.Info("Scheduling retry", "requestID", requestID, "attempt", attempt+1, "backoff", backoff, "endpoint", endpoint)
+	}
+
+	time.Sleep(backoff)
+	return c.doWithRetry(req, attempt+1, requestID, startTime)
+}
+
+// finalizeAttempt returns the final result or wraps errors
+func (c *Client) finalizeAttempt(resp *http.Response, err error, req *http.Request, attempt int, startTime time.Time, requestID string) (*http.Response, error) {
 	if err != nil {
 		return nil, c.createClientError(ErrorTypeNetwork, "network request failed", err, requestID, req, attempt, time.Since(startTime))
 	}
-
-	return resp, err
+	return resp, nil
 }
 
 // executeMiddleware executes the middleware chain

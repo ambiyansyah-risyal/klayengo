@@ -8,8 +8,9 @@ import (
 )
 
 const (
-	testErrorFormat = "Expected '%s', got '%s'"
-	testMessage     = "test message"
+	testErrorFormat         = "Expected '%s', got '%s'"
+	testMessage             = "test message"
+	testInternalServerError = "internal server error"
 )
 
 func TestClientError(t *testing.T) {
@@ -28,7 +29,7 @@ func TestClientError(t *testing.T) {
 	cause := errors.New("underlying error")
 	errWithCause := &ClientError{
 		Type:    "ServerError",
-		Message: "internal server error",
+		Message: testInternalServerError,
 		Cause:   cause,
 	}
 
@@ -97,7 +98,7 @@ func TestClientErrorDebugInfo(t *testing.T) {
 func TestClientErrorDebugInfoWithStatusCode(t *testing.T) {
 	err := &ClientError{
 		Type:       "ServerError",
-		Message:    "internal server error",
+		Message:    testInternalServerError,
 		RequestID:  "req_789",
 		Method:     "POST",
 		URL:        "https://api.example.com/submit",
@@ -151,7 +152,7 @@ func TestClientErrorTypes(t *testing.T) {
 		{"TimeoutError", "request timed out", errors.New("deadline exceeded")},
 		{"RateLimitError", "rate limit exceeded", nil},
 		{"CircuitBreakerError", "circuit breaker open", nil},
-		{"ServerError", "internal server error", errors.New("500 status")},
+		{"ServerError", testInternalServerError, errors.New("500 status")},
 	}
 
 	for _, tc := range testCases {
@@ -279,19 +280,32 @@ func TestClientErrorIs(t *testing.T) {
 func TestClientErrorNilHandling(t *testing.T) {
 	var err *ClientError
 
-	// Test that nil error doesn't panic
-	if err != nil {
-		result := err.Error()
-		if result != "" {
-			t.Errorf("Nil error Error() should return empty string, got '%s'", result)
-		}
+	// Test that nil error methods don't panic and return expected values
+	result := err.Error()
+	if result != "<nil>" {
+		t.Errorf("Nil error Error() should return '<nil>', got '%s'", result)
 	}
 
 	// Test Unwrap on nil
-	if err != nil {
-		unwrapped := err.Unwrap()
-		if unwrapped != nil {
-			t.Errorf("Nil error Unwrap() should return nil, got %v", unwrapped)
-		}
+	unwrapped := err.Unwrap()
+	if unwrapped != nil {
+		t.Errorf("Nil error Unwrap() should return nil, got %v", unwrapped)
+	}
+
+	// Test Is on nil - the Type field will be used in the comparison
+	targetErr := &ClientError{Type: "test"}
+	if err.Is(targetErr) {
+		t.Error("Nil error Is() should return false")
+	}
+
+	// Verify the target error has the expected type (to ensure Type field is used)
+	if targetErr.Type != "test" {
+		t.Errorf("Target error type should be 'test', got '%s'", targetErr.Type)
+	}
+
+	// Test DebugInfo on nil
+	debugInfo := err.DebugInfo()
+	if debugInfo != "Error: <nil>" {
+		t.Errorf("Nil error DebugInfo() should return 'Error: <nil>', got '%s'", debugInfo)
 	}
 }
