@@ -180,6 +180,15 @@ bump_version() {
     create_version "$new_version"
 }
 
+# Function to check if workspace is clean
+check_clean_workspace() {
+    cd "$PROJECT_ROOT"
+    if [[ -n $(git status --porcelain) ]]; then
+        print_error "Workspace is not clean. Please commit or stash your changes before creating a version."
+        exit 1
+    fi
+}
+
 # Main script initialization
 check_dependencies
 
