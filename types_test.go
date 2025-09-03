@@ -6,6 +6,16 @@ import (
 	"time"
 )
 
+const (
+	typesTestURL         = "https://example.com"
+	testContentType      = "Content-Type"
+	testContentTypeValue = "application/json"
+	testCustomHeader     = "X-Custom"
+	testCustomValue      = "value"
+	testHeaderFormat     = "Expected %s='%s', got '%s'"
+	testStatusFormat     = "Expected status 200, got %d"
+)
+
 func TestCircuitStateConstants(t *testing.T) {
 	if StateClosed != 0 {
 		t.Errorf("Expected StateClosed=0, got %d", StateClosed)
@@ -43,7 +53,7 @@ func TestCircuitBreakerConfig(t *testing.T) {
 func TestCacheEntry(t *testing.T) {
 	body := []byte("test response")
 	statusCode := 200
-	header := http.Header{"Content-Type": []string{"application/json"}}
+	header := http.Header{testContentType: []string{testContentTypeValue}}
 
 	entry := &CacheEntry{
 		Body:       body,
@@ -60,8 +70,8 @@ func TestCacheEntry(t *testing.T) {
 		t.Errorf("Expected StatusCode=200, got %d", entry.StatusCode)
 	}
 
-	if entry.Header.Get("Content-Type") != "application/json" {
-		t.Errorf("Expected Content-Type='application/json', got '%s'", entry.Header.Get("Content-Type"))
+	if entry.Header.Get(testContentType) != testContentTypeValue {
+		t.Errorf(testHeaderFormat, testContentType, testContentTypeValue, entry.Header.Get(testContentType))
 	}
 
 	if entry.ExpiresAt.Before(time.Now()) {
@@ -84,19 +94,19 @@ func TestCacheEntryExpiration(t *testing.T) {
 
 func TestCacheEntryHeader(t *testing.T) {
 	header := make(http.Header)
-	header.Set("Content-Type", "application/json")
-	header.Set("X-Custom", "value")
+	header.Set(testContentType, testContentTypeValue)
+	header.Set(testCustomHeader, testCustomValue)
 
 	entry := &CacheEntry{
 		Header: header,
 	}
 
-	if entry.Header.Get("Content-Type") != "application/json" {
-		t.Errorf("Expected Content-Type='application/json', got '%s'", entry.Header.Get("Content-Type"))
+	if entry.Header.Get(testContentType) != testContentTypeValue {
+		t.Errorf(testHeaderFormat, testContentType, testContentTypeValue, entry.Header.Get(testContentType))
 	}
 
-	if entry.Header.Get("X-Custom") != "value" {
-		t.Errorf("Expected X-Custom='value', got '%s'", entry.Header.Get("X-Custom"))
+	if entry.Header.Get(testCustomHeader) != testCustomValue {
+		t.Errorf(testHeaderFormat, testCustomHeader, testCustomValue, entry.Header.Get(testCustomHeader))
 	}
 }
 
@@ -168,7 +178,7 @@ func TestRoundTripperFunc(t *testing.T) {
 		return &http.Response{StatusCode: 200}, nil
 	})
 
-	req, _ := http.NewRequest("GET", "https://example.com", nil)
+	req, _ := http.NewRequest("GET", typesTestURL, nil)
 	resp, err := roundTripper.RoundTrip(req)
 
 	if err != nil {
@@ -180,16 +190,22 @@ func TestRoundTripperFunc(t *testing.T) {
 	}
 
 	if resp.StatusCode != 200 {
-		t.Errorf("Expected status 200, got %d", resp.StatusCode)
+		t.Errorf(testStatusFormat, resp.StatusCode)
 	}
 }
 
 func TestRoundTripperFuncNil(t *testing.T) {
 	var roundTripper RoundTripperFunc
 
-	if roundTripper != nil {
-		t.Error("Expected nil RoundTripperFunc")
-	}
+	// Test that calling RoundTrip on nil RoundTripperFunc panics as expected
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("Expected panic when calling RoundTrip on nil RoundTripperFunc")
+		}
+	}()
+
+	req, _ := http.NewRequest("GET", typesTestURL, nil)
+	_, _ = roundTripper.RoundTrip(req) // Error ignored intentionally - expecting panic
 }
 
 func TestMiddlewareType(t *testing.T) {
@@ -205,7 +221,7 @@ func TestMiddlewareType(t *testing.T) {
 		return &http.Response{StatusCode: 200}, nil
 	})
 
-	req, _ := http.NewRequest("GET", "https://example.com", nil)
+	req, _ := http.NewRequest("GET", typesTestURL, nil)
 	resp, err := middleware(req, next)
 
 	if err != nil {
@@ -221,7 +237,7 @@ func TestMiddlewareType(t *testing.T) {
 	}
 
 	if resp.StatusCode != 200 {
-		t.Errorf("Expected status 200, got %d", resp.StatusCode)
+		t.Errorf(testStatusFormat, resp.StatusCode)
 	}
 }
 
@@ -249,8 +265,8 @@ func TestCacheConditionType(t *testing.T) {
 		return req.Method == "GET"
 	})
 
-	getReq, _ := http.NewRequest("GET", "https://example.com", nil)
-	postReq, _ := http.NewRequest("POST", "https://example.com", nil)
+	getReq, _ := http.NewRequest("GET", typesTestURL, nil)
+	postReq, _ := http.NewRequest("POST", typesTestURL, nil)
 
 	if !condition(getReq) {
 		t.Error("Expected true for GET request")
@@ -337,7 +353,7 @@ func TestCacheEntryEmptyBody(t *testing.T) {
 	}
 
 	if entry.StatusCode != 200 {
-		t.Errorf("Expected status 200, got %d", entry.StatusCode)
+		t.Errorf(testStatusFormat, entry.StatusCode)
 	}
 }
 

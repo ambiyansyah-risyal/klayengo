@@ -7,6 +7,9 @@ import (
 
 // Error returns a formatted error message with enhanced context
 func (e *ClientError) Error() string {
+	if e == nil {
+		return "<nil>"
+	}
 	if e.Cause != nil {
 		msg := fmt.Sprintf("%s: %s (%v)", e.Type, e.Message, e.Cause)
 		if e.RequestID != "" {
@@ -30,11 +33,17 @@ func (e *ClientError) Error() string {
 
 // Unwrap returns the underlying error
 func (e *ClientError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
 	return e.Cause
 }
 
 // Is checks if this error matches another error for errors.Is() compatibility
 func (e *ClientError) Is(target error) bool {
+	if e == nil {
+		return false
+	}
 	if targetErr, ok := target.(*ClientError); ok {
 		return e.Type == targetErr.Type
 	}
@@ -43,6 +52,9 @@ func (e *ClientError) Is(target error) bool {
 
 // DebugInfo returns detailed debugging information about the error
 func (e *ClientError) DebugInfo() string {
+	if e == nil {
+		return "Error: <nil>"
+	}
 	info := fmt.Sprintf("Error Type: %s\n", e.Type)
 	info += fmt.Sprintf("Message: %s\n", e.Message)
 	if e.RequestID != "" {
