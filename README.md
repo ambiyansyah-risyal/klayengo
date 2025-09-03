@@ -23,7 +23,7 @@ A resilient HTTP client wrapper for Go with retry logic, exponential backoff, an
 
 ## Status
 
-**Version**: 1.0.0  
+**Version**: 1.1.0  
 **Go Version**: 1.23+ (tested with Go 1.24.6)  
 **Test Coverage**: 87.1%  
 **License**: MIT

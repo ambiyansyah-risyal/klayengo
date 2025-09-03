@@ -10,13 +10,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [v1.1.0] - 2025-09-03
 
 ### Added
-- Release v1.1.0
-
-### Changed
-- Version bump to v1.1.0
-
-
-### Added
 - **Request Deduplication**: Prevents duplicate concurrent requests by deduplicating identical in-flight requests
   - Automatic deduplication of concurrent identical requests
   - Configurable deduplication key generation
@@ -28,6 +21,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial public release
 - Comprehensive versioning system with build-time injection
 - Makefile for automated builds and releases
+
+### Changed
+- Updated documentation with versioning guidelines
+
+### Fixed
+- Minor documentation improvements
+- Added missing check_clean_workspace function to version script
 
 ### Changed
 - Updated documentation with versioning guidelines
