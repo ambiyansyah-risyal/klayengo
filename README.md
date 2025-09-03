@@ -52,9 +52,61 @@ fmt.Printf("Commit: %s\n", versionInfo["commit"])
 fmt.Printf("Build Date: %s\n", versionInfo["build_date"])
 ```
 
+### Automated Release Process
+
+Klayengo uses GitHub Actions for fully automated releases:
+
+#### 🚀 Automatic Releases
+- **Trigger**: Push to `main` branch (after PR merge)
+- **Process**: 
+  1. Analyzes commit messages using conventional commits
+  2. Determines version bump type (major/minor/patch)
+  3. Updates version files and CHANGELOG.md
+  4. Creates git tag and pushes to remote
+  5. Builds binaries with version injection
+  6. Creates GitHub release with changelog
+
+#### 📋 Conventional Commits
+Use conventional commit format for automatic version bumping:
+
+```bash
+# Feature (minor bump)
+git commit -m "feat: add configuration validation"
+
+# Bug fix (patch bump)
+git commit -m "fix: handle timeout errors properly"
+
+# Breaking change (major bump)
+git commit -m "feat!: change API interface"
+# or
+git commit -m "feat: change API interface
+
+BREAKING CHANGE: This changes the interface"
+```
+
+#### 🔍 Pull Request Analysis
+When you create a PR, GitHub Actions will:
+- Analyze your commits
+- Suggest the version bump type
+- Show what the new version will be
+- Provide tips for better commit messages
+
+#### 🛠️ Manual Releases
+For special cases, trigger manual releases via GitHub Actions:
+
+1. Go to **Actions** tab
+2. Select **Manual Release** workflow
+3. Choose version bump type or specify custom version
+4. Click **Run workflow**
+
+#### 📊 Release Workflow
+```
+PR Merged to main → Auto-tag Workflow → Version Bump → Git Tag → Release Workflow → GitHub Release
+```
+
 ### Using the Version Management Script
 
-Klayengo includes a comprehensive version management script for easy releases:
+For local development and manual version management:
 
 ```bash
 # Show current version information
