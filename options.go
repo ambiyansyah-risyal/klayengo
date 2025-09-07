@@ -373,10 +373,9 @@ func (c *Client) validateOptionCombinations() []string {
 	var errors []string
 
 	// Cache and deduplication can work together but warn about potential conflicts
-	if c.cache != nil && c.deduplication != nil {
-		// This is allowed but could be confusing - both cache and deduplication
-		// might try to handle the same request
-	}
+	// This is allowed but could be confusing - both cache and deduplication
+	// might try to handle the same request
+	// Note: Currently allowing this combination, but monitoring for issues
 
 	// Circuit breaker and retries work well together
 	// Rate limiter and retries work well together
