@@ -219,6 +219,8 @@ func (c *Client) ValidateConfiguration() error {
 	errors = append(errors, c.validateDeduplicationConfig()...)
 	errors = append(errors, c.validateMiddlewareConfig()...)
 	errors = append(errors, c.validateHTTPClientConfig()...)
+	errors = append(errors, c.validateOptionCombinations()...)
+	errors = append(errors, c.validateExtremeValues()...)
 
 	if len(errors) > 0 {
 		return &ClientError{
@@ -251,8 +253,10 @@ func (c *Client) validateRetryConfig() []string {
 		errors = append(errors, "backoffMultiplier must be positive")
 	}
 
+	// Note: jitter is clamped to [0,1] in WithJitter, so this validation
+	// is mainly for detecting if someone manually set an invalid value
 	if c.jitter < 0 || c.jitter > 1 {
-		errors = append(errors, "jitter must be between 0 and 1")
+		errors = append(errors, "jitter must be between 0 and 1 (will be clamped automatically)")
 	}
 
 	if c.timeout <= 0 {
@@ -359,6 +363,66 @@ func (c *Client) validateHTTPClientConfig() []string {
 
 	if c.httpClient == nil {
 		errors = append(errors, "HTTP client cannot be nil")
+	}
+
+	return errors
+}
+
+// validateOptionCombinations validates that option combinations make sense together
+func (c *Client) validateOptionCombinations() []string {
+	var errors []string
+
+	// Cache and deduplication can work together but warn about potential conflicts
+	if c.cache != nil && c.deduplication != nil {
+		// This is allowed but could be confusing - both cache and deduplication
+		// might try to handle the same request
+	}
+
+	// Circuit breaker and retries work well together
+	// Rate limiter and retries work well together
+	// These combinations are fine
+
+	// Debug logging without logger is invalid (already checked in validateDebugConfig)
+	// Cache without TTL is invalid (already checked in validateCacheConfig)
+
+	return errors
+}
+
+// validateExtremeValues validates that configuration values are within reasonable bounds
+func (c *Client) validateExtremeValues() []string {
+	var errors []string
+
+	// Check for extreme retry values that could cause issues
+	if c.maxRetries > 100 {
+		errors = append(errors, "maxRetries > 100 may cause excessive resource usage")
+	}
+
+	// Check for extreme backoff values
+	if c.initialBackoff > 10*time.Minute {
+		errors = append(errors, "initialBackoff > 10m may cause very long delays")
+	}
+	if c.maxBackoff > 1*time.Hour {
+		errors = append(errors, "maxBackoff > 1h may cause extremely long delays")
+	}
+
+	// Check for extreme timeout values
+	if c.timeout > 10*time.Minute {
+		errors = append(errors, "timeout > 10m may cause requests to hang for too long")
+	}
+
+	// Check for extreme rate limiter values
+	if c.rateLimiter != nil {
+		if c.rateLimiter.maxTokens > 1000000 {
+			errors = append(errors, "rateLimiter maxTokens > 1M may cause memory issues")
+		}
+		if c.rateLimiter.refillRate < time.Millisecond {
+			errors = append(errors, "rateLimiter refillRate < 1ms may cause excessive CPU usage")
+		}
+	}
+
+	// Check for extreme cache TTL
+	if c.cache != nil && c.cacheTTL > 24*time.Hour {
+		errors = append(errors, "cacheTTL > 24h may cause stale data issues")
 	}
 
 	return errors

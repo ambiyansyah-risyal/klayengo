@@ -2,6 +2,7 @@ package klayengo
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"math/rand"
 	"net/http"
@@ -443,6 +444,20 @@ func (c *Client) IsValid() bool {
 // ValidationError returns the validation error if the configuration is invalid, nil otherwise
 func (c *Client) ValidationError() error {
 	return c.validationError
+}
+
+// ValidateConfigurationStrict validates the client configuration and panics if invalid
+// This is useful for development and testing where invalid configurations should not be allowed
+func (c *Client) ValidateConfigurationStrict() {
+	if err := c.ValidateConfiguration(); err != nil {
+		panic(fmt.Sprintf("invalid client configuration: %v", err))
+	}
+}
+
+// MustValidateConfiguration validates the client configuration and returns an error if invalid
+// This is an alias for ValidateConfiguration for clarity
+func (c *Client) MustValidateConfiguration() error {
+	return c.ValidateConfiguration()
 }
 
 // getEndpointFromRequest extracts a simplified endpoint from the request for metrics
