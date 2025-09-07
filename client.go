@@ -6,7 +6,7 @@ import (
 	"io"
 	"math/rand"
 	"net/http"
-	"net/url"
+	"strings"
 	"time"
 )
 
@@ -102,18 +102,18 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	start := time.Now()
 	endpoint := getEndpointFromRequest(req)
 
-	// Generate request ID for tracing
-	requestID := ""
-	if c.debug != nil && c.debug.RequestIDGen != nil {
+	// Generate request ID for tracing (only if debug is enabled)
+	var requestID string
+	if c.debug != nil && c.debug.Enabled && c.debug.RequestIDGen != nil {
 		requestID = c.debug.RequestIDGen()
 	}
 
-	// Debug logging
+	// Early debug logging check
 	if c.debug != nil && c.debug.Enabled && c.debug.LogRequests && c.logger != nil {
 		c.logger.Debug("Starting request", "requestID", requestID, "method", req.Method, "url", req.URL.String(), "endpoint", endpoint)
 	}
 
-	// Record request start
+	// Record request start (early check)
 	if c.metrics != nil {
 		c.metrics.RecordRequestStart(req.Method, endpoint)
 	}
@@ -410,15 +410,6 @@ func DefaultRetryCondition(resp *http.Response, err error) bool {
 // createClientError creates a ClientError with enhanced context
 func (c *Client) createClientError(errorType, message string, cause error, requestID string, req *http.Request, attempt int, duration time.Duration) *ClientError {
 	endpoint := getEndpointFromRequest(req)
-	statusCode := 0
-
-	// Try to get status code from cause if it's an HTTP error
-	if cause != nil {
-		if httpErr, ok := cause.(*url.Error); ok && httpErr.Err != nil {
-			// Could be a more specific error type - handled in error creation below
-			_ = httpErr // Avoid unused variable warning
-		}
-	}
 
 	return &ClientError{
 		Type:       errorType,
@@ -431,7 +422,7 @@ func (c *Client) createClientError(errorType, message string, cause error, reque
 		MaxRetries: c.maxRetries,
 		Timestamp:  time.Now(),
 		Duration:   duration,
-		StatusCode: statusCode,
+		StatusCode: 0,
 		Endpoint:   endpoint,
 	}
 }
@@ -469,15 +460,15 @@ func getEndpointFromRequest(req *http.Request) string {
 	host := req.URL.Host
 	path := req.URL.Path
 
-	// Pre-allocate buffer for efficiency
-	var buf []byte
-	buf = append(buf, host...)
+	// Use strings.Builder for efficient string concatenation
+	var builder strings.Builder
+	builder.WriteString(host)
 
 	if path != "" && path != "/" {
-		buf = append(buf, path...)
+		builder.WriteString(path)
 	} else {
-		buf = append(buf, '/')
+		builder.WriteByte('/')
 	}
 
-	return string(buf)
+	return builder.String()
 }
