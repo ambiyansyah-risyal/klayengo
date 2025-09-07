@@ -1,0 +1,171 @@
+name: Auto Tag and Release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+concurrency:
+  group: auto-tag-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  auto-tag:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Set up Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: 1.24.x
+
+      - name: Get previous tag
+        id: prev_tag
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          echo "Previous tag: $PREV_TAG"
+          echo "prev_tag=$PREV_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Determine bump type from commits
+        id: bump
+        run: |
+          set -euo pipefail
+
+          # Get commits since previous tag
+          if [ "${{ steps.prev_tag.outputs.prev_tag }}" = "v0.0.0" ]; then
+            COMMITS=$(git log --pretty=%B)
+          else
+            COMMITS=$(git log --pretty=%B ${{ steps.prev_tag.outputs.prev_tag }}..HEAD)
+          fi
+
+          echo "Analyzing commits for version bump..."
+          echo "Commits:"
+          echo "$COMMITS"
+          echo "---"
+
+          BUMP="patch"
+
+          # Check for breaking changes (conventional commits with ! or BREAKING CHANGE)
+          if echo "$COMMITS" | grep -Ei "(^|\n)(feat|fix|chore|docs|style|refactor|perf|test|ci)(\(.*\))?!:.*|BREAKING CHANGE" >/dev/null; then
+            BUMP="major"
+            echo "Major bump: Breaking change detected"
+          # Check for features (conventional commits with feat:)
+          elif echo "$COMMITS" | grep -Ei "(^|\n)feat(\(.*\))?:.*" >/dev/null; then
+            BUMP="minor"
+            echo "Minor bump: New feature detected"
+          else
+            echo "Patch bump: Only fixes, chores, or other changes detected"
+          fi
+
+          echo "Selected bump: $BUMP"
+          echo "bump=$BUMP" >> "$GITHUB_OUTPUT"
+
+      - name: Calculate new version
+        id: version
+        run: |
+          PREV_TAG="${{ steps.prev_tag.outputs.prev_tag }}"
+          BUMP="${{ steps.bump.outputs.bump }}"
+
+          # Remove 'v' prefix for calculation
+          VERSION_NUMBERS=$(echo "$PREV_TAG" | sed 's/^v//')
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION_NUMBERS"
+
+          case $BUMP in
+            major)
+              MAJOR=$((MAJOR + 1))
+              MINOR=0
+              PATCH=0
+              ;;
+            minor)
+              MINOR=$((MINOR + 1))
+              PATCH=0
+              ;;
+            patch)
+              PATCH=$((PATCH + 1))
+              ;;
+          esac
+
+          NEW_VERSION="v$MAJOR.$MINOR.$PATCH"
+          echo "New version: $NEW_VERSION"
+          echo "new_version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Update version.go
+        run: |
+          NEW_VERSION="${{ steps.version.outputs.new_version }}"
+          if [ -f "version.go" ]; then
+            sed -i "s/Version = \".*\"/Version = \"$NEW_VERSION\"/" version.go
+            echo "Updated version.go with $NEW_VERSION"
+          fi
+
+      - name: Update CHANGELOG.md
+        run: |
+          NEW_VERSION="${{ steps.version.outputs.new_version }}"
+          TODAY=$(date +"%Y-%m-%d")
+
+          if [ -f "CHANGELOG.md" ]; then
+            # Create changelog entry
+            CHANGELOG_ENTRY="## [$NEW_VERSION] - $TODAY\n\n### Changes\n"
+
+            # Add commit messages as bullet points
+            if [ "${{ steps.prev_tag.outputs.prev_tag }}" = "v0.0.0" ]; then
+              git log --pretty=format="- %s" | head -20 >> temp_changes.txt
+            else
+              git log --pretty=format="- %s" ${{ steps.prev_tag.outputs.prev_tag }}..HEAD >> temp_changes.txt
+            fi
+
+            # Remove merge commit messages
+            sed -i '/^Merge /d' temp_changes.txt
+
+            if [ -s temp_changes.txt ]; then
+              CHANGELOG_ENTRY="$CHANGELOG_ENTRY$(cat temp_changes.txt | head -10)\n"
+            else
+              CHANGELOG_ENTRY="$CHANGELOG_ENTRY- Release $NEW_VERSION\n"
+            fi
+
+            rm -f temp_changes.txt
+
+            # Insert at the top of CHANGELOG.md
+            echo -e "$CHANGELOG_ENTRY\n$(cat CHANGELOG.md)" > CHANGELOG.md
+            echo "Updated CHANGELOG.md with $NEW_VERSION"
+          fi
+
+      - name: Commit version changes
+        run: |
+          NEW_VERSION="${{ steps.version.outputs.new_version }}"
+          git add .
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "chore: bump version to $NEW_VERSION"
+            echo "Committed version bump to $NEW_VERSION"
+          fi
+
+      - name: Create and push tag
+        run: |
+          NEW_VERSION="${{ steps.version.outputs.new_version }}"
+          git tag -a "$NEW_VERSION" -m "Release $NEW_VERSION"
+          git push origin main
+          git push origin "$NEW_VERSION"
+          echo "Created and pushed tag $NEW_VERSION"
+
+      - name: Show result
+        run: |
+          echo "✅ Automated release process completed!"
+          echo "📦 New version: ${{ steps.version.outputs.new_version }}"
+          echo "🔖 Tag created and pushed"
+          echo "🚀 Release workflow will be triggered automatically"

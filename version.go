@@ -8,7 +8,7 @@ import (
 // Version information - these will be set at build time
 var (
 	// Version is the current version of Klayengo
-	Version = "1.0.0"
+	Version = "v1.1.0"
 
 	// GitCommit is the git commit hash
 	GitCommit = "unknown"
