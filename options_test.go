@@ -30,6 +30,11 @@ const (
 	ErrMsgMiddlewareNil                  = "middleware[0] cannot be nil"
 )
 
+// Test error message format constants
+const (
+	ErrMsgExpectedContains = "Expected error to contain '%s', got: %v"
+)
+
 func TestWithMaxRetries(t *testing.T) {
 	client := New(WithMaxRetries(5))
 
@@ -528,7 +533,7 @@ func TestValidateConfigurationRetryErrors(t *testing.T) {
 					t.Error("Expected configuration to be invalid")
 				}
 				if !strings.Contains(client.ValidationError().Error(), tt.errorMsg) {
-					t.Errorf("Expected error to contain '%s', got: %v", tt.errorMsg, client.ValidationError())
+					t.Errorf(ErrMsgExpectedContains, tt.errorMsg, client.ValidationError())
 				}
 			}
 		})
@@ -669,6 +674,88 @@ func TestValidateConfigurationMultipleErrors(t *testing.T) {
 		if !strings.Contains(errStr, expected) {
 			t.Errorf("Expected error to contain '%s', got: %s", expected, errStr)
 		}
+	}
+}
+
+func TestValidateConfigurationExtremeValues(t *testing.T) {
+	tests := []struct {
+		name     string
+		options  []Option
+		errorMsg string
+	}{
+		{
+			name:     "extreme maxRetries",
+			options:  []Option{WithMaxRetries(200)},
+			errorMsg: "maxRetries > 100 may cause excessive resource usage",
+		},
+		{
+			name:     "extreme initialBackoff",
+			options:  []Option{WithInitialBackoff(15 * time.Minute)},
+			errorMsg: "initialBackoff > 10m may cause very long delays",
+		},
+		{
+			name:     "extreme maxBackoff",
+			options:  []Option{WithMaxBackoff(2 * time.Hour)},
+			errorMsg: "maxBackoff > 1h may cause extremely long delays",
+		},
+		{
+			name:     "extreme timeout",
+			options:  []Option{WithTimeout(15 * time.Minute)},
+			errorMsg: "timeout > 10m may cause requests to hang for too long",
+		},
+		{
+			name:     "extreme rateLimiter maxTokens",
+			options:  []Option{WithRateLimiter(2000000, 1*time.Minute)},
+			errorMsg: "rateLimiter maxTokens > 1M may cause memory issues",
+		},
+		{
+			name:     "extreme rateLimiter refillRate",
+			options:  []Option{WithRateLimiter(100, 500*time.Microsecond)},
+			errorMsg: "rateLimiter refillRate < 1ms may cause excessive CPU usage",
+		},
+		{
+			name:     "extreme cacheTTL",
+			options:  []Option{WithCache(48 * time.Hour)},
+			errorMsg: "cacheTTL > 24h may cause stale data issues",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := New(tt.options...)
+			if client.IsValid() {
+				t.Error("Expected configuration to be invalid due to extreme values")
+			}
+			if !strings.Contains(client.ValidationError().Error(), tt.errorMsg) {
+				t.Errorf("Expected error to contain '%s', got: %v", tt.errorMsg, client.ValidationError())
+			}
+		})
+	}
+}
+
+func TestValidateConfigurationStrict(t *testing.T) {
+	// Test that ValidateConfigurationStrict panics for invalid config
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("Expected ValidateConfigurationStrict to panic for invalid config")
+		}
+	}()
+
+	client := New(WithMaxRetries(-1))
+	client.ValidateConfigurationStrict()
+}
+
+func TestMustValidateConfiguration(t *testing.T) {
+	// Test valid configuration
+	client := New(WithMaxRetries(5))
+	if err := client.MustValidateConfiguration(); err != nil {
+		t.Errorf("Expected no validation error for valid config, got: %v", err)
+	}
+
+	// Test invalid configuration
+	client = New(WithMaxRetries(-1))
+	if err := client.MustValidateConfiguration(); err == nil {
+		t.Error("Expected validation error for invalid config")
 	}
 }
 
