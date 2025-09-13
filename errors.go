@@ -5,7 +5,6 @@ import (
 	"time"
 )
 
-// Error returns a formatted error message with enhanced context
 func (e *ClientError) Error() string {
 	if e == nil {
 		return "<nil>"
@@ -31,7 +30,6 @@ func (e *ClientError) Error() string {
 	return msg
 }
 
-// Unwrap returns the underlying error
 func (e *ClientError) Unwrap() error {
 	if e == nil {
 		return nil
@@ -39,7 +37,6 @@ func (e *ClientError) Unwrap() error {
 	return e.Cause
 }
 
-// Is checks if this error matches another error for errors.Is() compatibility
 func (e *ClientError) Is(target error) bool {
 	if e == nil {
 		return false
@@ -50,7 +47,6 @@ func (e *ClientError) Is(target error) bool {
 	return false
 }
 
-// DebugInfo returns detailed debugging information about the error
 func (e *ClientError) DebugInfo() string {
 	if e == nil {
 		return "Error: <nil>"

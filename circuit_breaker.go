@@ -5,7 +5,6 @@ import (
 	"time"
 )
 
-// NewCircuitBreaker creates a new circuit breaker
 func NewCircuitBreaker(config CircuitBreakerConfig) *CircuitBreaker {
 	if config.FailureThreshold == 0 {
 		config.FailureThreshold = 5
@@ -26,7 +25,6 @@ func NewCircuitBreaker(config CircuitBreakerConfig) *CircuitBreaker {
 	}
 }
 
-// Allow checks if the request should be allowed through the circuit breaker
 func (cb *CircuitBreaker) Allow() bool {
 	now := time.Now().UnixNano()
 	state := CircuitState(atomic.LoadInt64(&cb.state))
@@ -37,7 +35,6 @@ func (cb *CircuitBreaker) Allow() bool {
 	case StateOpen:
 		lastFailure := atomic.LoadInt64(&cb.lastFailure)
 		if now-lastFailure >= int64(cb.config.RecoveryTimeout) {
-			// Try to transition to half-open
 			if atomic.CompareAndSwapInt64(&cb.state, int64(StateOpen), int64(StateHalfOpen)) {
 				atomic.StoreInt64(&cb.successes, 0)
 				return true
@@ -51,7 +48,6 @@ func (cb *CircuitBreaker) Allow() bool {
 	}
 }
 
-// RecordFailure records a failure in the circuit breaker
 func (cb *CircuitBreaker) RecordFailure() {
 	now := time.Now().UnixNano()
 	atomic.StoreInt64(&cb.lastFailure, now)
@@ -65,24 +61,19 @@ func (cb *CircuitBreaker) RecordFailure() {
 			atomic.StoreInt64(&cb.state, int64(StateOpen))
 		}
 	case StateOpen:
-		// When open, just update lastFailure
 	case StateHalfOpen:
-		// When half-open, a failure should immediately open the circuit
 		atomic.AddInt64(&cb.failures, 1)
 		atomic.StoreInt64(&cb.state, int64(StateOpen))
 		atomic.StoreInt64(&cb.successes, 0)
 	}
 }
 
-// RecordSuccess records a success in the circuit breaker
 func (cb *CircuitBreaker) RecordSuccess() {
 	state := CircuitState(atomic.LoadInt64(&cb.state))
 
 	switch state {
 	case StateClosed:
-		// Success in closed state doesn't change anything
 	case StateOpen:
-		// Success in open state doesn't change anything
 	case StateHalfOpen:
 		successes := atomic.AddInt64(&cb.successes, 1)
 		if successes >= int64(cb.config.SuccessThreshold) {

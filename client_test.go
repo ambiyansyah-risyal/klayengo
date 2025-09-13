@@ -29,7 +29,6 @@ func TestNew(t *testing.T) {
 		t.Fatal("New() returned nil")
 	}
 
-	// Test default values
 	if client.maxRetries != 3 {
 		t.Errorf("Expected maxRetries=3, got %d", client.maxRetries)
 	}
@@ -179,7 +178,7 @@ func TestDoWithRetryFailure(t *testing.T) {
 		t.Fatalf("Do() returned error: %v", err)
 	}
 
-	if callCount != 3 { // initial + 2 retries
+	if callCount != 3 {
 		t.Errorf("Expected 3 calls, got %d", callCount)
 	}
 
@@ -193,7 +192,7 @@ func TestCalculateBackoff(t *testing.T) {
 		WithInitialBackoff(100*time.Millisecond),
 		WithMaxBackoff(1*time.Second),
 		WithBackoffMultiplier(2.0),
-		WithJitter(0.0), // Disable jitter for predictable test
+		WithJitter(0.0),
 	)
 
 	tests := []struct {
@@ -204,7 +203,7 @@ func TestCalculateBackoff(t *testing.T) {
 		{1, 200 * time.Millisecond},
 		{2, 400 * time.Millisecond},
 		{3, 800 * time.Millisecond},
-		{4, 1000 * time.Millisecond}, // capped at maxBackoff
+		{4, 1000 * time.Millisecond},
 	}
 
 	for _, test := range tests {
@@ -341,8 +340,6 @@ func TestClientWithCustomHTTPClient(t *testing.T) {
 	}
 }
 
-// Benchmark tests for performance measurement
-
 func BenchmarkClientGet(b *testing.B) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -361,7 +358,7 @@ func BenchmarkClientGet(b *testing.B) {
 			if err != nil {
 				b.Fatal(err)
 			}
-			resp.Body.Close()
+			_ = resp.Body.Close()
 		}
 	})
 }
@@ -384,7 +381,7 @@ func BenchmarkClientPost(b *testing.B) {
 			if err != nil {
 				b.Fatal(err)
 			}
-			resp.Body.Close()
+			_ = resp.Body.Close()
 		}
 	})
 }
@@ -393,7 +390,7 @@ func BenchmarkClientWithRetries(b *testing.B) {
 	callCount := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		callCount++
-		if callCount%3 != 0 { // Fail 2 out of 3 requests
+		if callCount%3 != 0 {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -407,7 +404,7 @@ func BenchmarkClientWithRetries(b *testing.B) {
 	client := New(
 		WithMaxRetries(2),
 		WithCircuitBreaker(CircuitBreakerConfig{
-			FailureThreshold: 1000, // Very high threshold to avoid opening during benchmark
+			FailureThreshold: 1000,
 			RecoveryTimeout:  1 * time.Second,
 		}),
 	)
@@ -418,7 +415,7 @@ func BenchmarkClientWithRetries(b *testing.B) {
 		if err != nil {
 			b.Fatal(err)
 		}
-		resp.Body.Close()
+		_ = resp.Body.Close()
 	}
 }
 
@@ -439,7 +436,7 @@ func BenchmarkClientWithCache(b *testing.B) {
 		if err != nil {
 			b.Fatal(err)
 		}
-		resp.Body.Close()
+		_ = resp.Body.Close()
 	}
 }
 
@@ -464,7 +461,7 @@ func BenchmarkClientWithCircuitBreaker(b *testing.B) {
 			if err != nil {
 				b.Fatal(err)
 			}
-			resp.Body.Close()
+			_ = resp.Body.Close()
 		}
 	})
 }
@@ -478,7 +475,7 @@ func BenchmarkClientWithRateLimiter(b *testing.B) {
 	}))
 	defer server.Close()
 
-	client := New(WithRateLimiter(100000, 1*time.Second)) // Very high limit to avoid blocking
+	client := New(WithRateLimiter(100000, 1*time.Second))
 
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
@@ -487,7 +484,7 @@ func BenchmarkClientWithRateLimiter(b *testing.B) {
 			if err != nil {
 				b.Fatal(err)
 			}
-			resp.Body.Close()
+			_ = resp.Body.Close()
 		}
 	})
 }
@@ -501,7 +498,6 @@ func BenchmarkClientFullFeatures(b *testing.B) {
 	}))
 	defer server.Close()
 
-	// Create metrics collector once to avoid duplicate registration
 	registry := prometheus.NewRegistry()
 	metricsCollector := NewMetricsCollectorWithRegistry(registry)
 
@@ -510,7 +506,7 @@ func BenchmarkClientFullFeatures(b *testing.B) {
 		WithCache(5*time.Minute),
 		WithRateLimiter(10000, 1*time.Second),
 		WithCircuitBreaker(CircuitBreakerConfig{
-			FailureThreshold: 1000, // High threshold to avoid opening
+			FailureThreshold: 1000,
 			RecoveryTimeout:  5 * time.Second,
 		}),
 		WithMetricsCollector(metricsCollector),
@@ -522,7 +518,7 @@ func BenchmarkClientFullFeatures(b *testing.B) {
 		if err != nil {
 			b.Fatal(err)
 		}
-		resp.Body.Close()
+		_ = resp.Body.Close()
 	}
 }
 
@@ -543,13 +539,12 @@ func BenchmarkClientWithDeduplication(b *testing.B) {
 		if err != nil {
 			b.Fatal(err)
 		}
-		resp.Body.Close()
+		_ = resp.Body.Close()
 	}
 }
 
 func BenchmarkClientConcurrentDeduplication(b *testing.B) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Simulate some processing time
 		time.Sleep(10 * time.Millisecond)
 		w.WriteHeader(http.StatusOK)
 		if _, err := w.Write([]byte(successResponseBody)); err != nil {
@@ -567,7 +562,7 @@ func BenchmarkClientConcurrentDeduplication(b *testing.B) {
 			if err != nil {
 				b.Fatal(err)
 			}
-			resp.Body.Close()
+			_ = resp.Body.Close()
 		}
 	})
 }

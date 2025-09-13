@@ -11,7 +11,6 @@ import (
 
 const testURL = "https://example.com"
 
-// Validation error message constants
 const (
 	ErrMsgMaxRetriesNegative             = "maxRetries must be non-negative"
 	ErrMsgInitialBackoffPositive         = "initialBackoff must be positive"
@@ -30,7 +29,6 @@ const (
 	ErrMsgMiddlewareNil                  = "middleware[0] cannot be nil"
 )
 
-// Test error message format constants
 const (
 	ErrMsgExpectedContains = "Expected error to contain '%s', got: %v"
 )
@@ -78,8 +76,8 @@ func TestWithJitter(t *testing.T) {
 		{0.1, 0.1},
 		{0.5, 0.5},
 		{1.0, 1.0},
-		{-0.1, 0.0}, // Should clamp to 0
-		{1.5, 1.0},  // Should clamp to 1
+		{-0.1, 0.0},
+		{1.5, 1.0},
 	}
 
 	for _, test := range tests {
@@ -118,7 +116,6 @@ func TestWithCache(t *testing.T) {
 		t.Errorf("Expected cacheTTL=%v, got %v", ttl, client.cacheTTL)
 	}
 
-	// Verify it's an InMemoryCache
 	if _, ok := client.cache.(*InMemoryCache); !ok {
 		t.Error("Expected InMemoryCache implementation")
 	}
@@ -196,7 +193,7 @@ func TestWithTimeout(t *testing.T) {
 
 func TestWithRetryCondition(t *testing.T) {
 	customCondition := func(resp *http.Response, err error) bool {
-		return err != nil // Only retry on errors
+		return err != nil
 	}
 
 	client := New(WithRetryCondition(customCondition))
@@ -205,12 +202,10 @@ func TestWithRetryCondition(t *testing.T) {
 		t.Fatal("Expected retry condition to be set")
 	}
 
-	// Test with error
 	if !client.retryCondition(nil, http.ErrHandlerTimeout) {
 		t.Error("Expected true for error condition")
 	}
 
-	// Test with 500 response
 	resp500 := &http.Response{StatusCode: 500}
 	if client.retryCondition(resp500, nil) {
 		t.Error("Expected false for 500 response with custom condition")
@@ -276,13 +271,11 @@ func TestWithHTTPClientTimeoutUpdate(t *testing.T) {
 		Timeout: 60 * time.Second,
 	}
 
-	// Set timeout first, then HTTP client
 	client := New(
 		WithTimeout(30*time.Second),
 		WithHTTPClient(customClient),
 	)
 
-	// HTTP client timeout should be updated to match client timeout
 	if client.httpClient.Timeout != 30*time.Second {
 		t.Errorf("Expected HTTP client timeout=30s, got %v", client.httpClient.Timeout)
 	}
@@ -340,7 +333,6 @@ func TestMultipleOptions(t *testing.T) {
 }
 
 func TestOptionsOrderIndependence(t *testing.T) {
-	// Test that option order doesn't matter
 	client1 := New(
 		WithMaxRetries(5),
 		WithTimeout(30*time.Second),
@@ -505,12 +497,12 @@ func TestValidateConfigurationRetryErrors(t *testing.T) {
 		{
 			name:     "jitter negative (clamped to 0)",
 			options:  []Option{WithJitter(-0.1)},
-			errorMsg: "", // No error since it's clamped
+			errorMsg: "",
 		},
 		{
 			name:     "jitter greater than 1 (clamped to 1)",
 			options:  []Option{WithJitter(1.5)},
-			errorMsg: "", // No error since it's clamped
+			errorMsg: "",
 		},
 		{
 			name:     "timeout zero",
@@ -523,12 +515,10 @@ func TestValidateConfigurationRetryErrors(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			client := New(tt.options...)
 			if tt.errorMsg == "" {
-				// No error expected
 				if !client.IsValid() {
 					t.Errorf("Expected configuration to be valid, got error: %v", client.ValidationError())
 				}
 			} else {
-				// Error expected
 				if client.IsValid() {
 					t.Error("Expected configuration to be invalid")
 				}
@@ -582,9 +572,6 @@ func TestValidateConfigurationCacheErrors(t *testing.T) {
 }
 
 func TestValidateConfigurationCircuitBreakerErrors(t *testing.T) {
-	// Circuit breaker defaults are set in WithCircuitBreaker and NewCircuitBreaker
-	// so zero/negative values get converted to valid defaults
-	// This test verifies that defaults are applied correctly
 	client := New(WithCircuitBreaker(CircuitBreakerConfig{}))
 	if !client.IsValid() {
 		t.Errorf("Expected configuration to be valid with default circuit breaker, got error: %v", client.ValidationError())
@@ -734,7 +721,6 @@ func TestValidateConfigurationExtremeValues(t *testing.T) {
 }
 
 func TestValidateConfigurationStrict(t *testing.T) {
-	// Test that ValidateConfigurationStrict panics for invalid config
 	defer func() {
 		if r := recover(); r == nil {
 			t.Error("Expected ValidateConfigurationStrict to panic for invalid config")
@@ -746,13 +732,11 @@ func TestValidateConfigurationStrict(t *testing.T) {
 }
 
 func TestMustValidateConfiguration(t *testing.T) {
-	// Test valid configuration
 	client := New(WithMaxRetries(5))
 	if err := client.MustValidateConfiguration(); err != nil {
 		t.Errorf("Expected no validation error for valid config, got: %v", err)
 	}
 
-	// Test invalid configuration
 	client = New(WithMaxRetries(-1))
 	if err := client.MustValidateConfiguration(); err == nil {
 		t.Error("Expected validation error for invalid config")

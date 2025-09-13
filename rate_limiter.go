@@ -5,7 +5,6 @@ import (
 	"time"
 )
 
-// NewRateLimiter creates a new rate limiter
 func NewRateLimiter(maxTokens int, refillRate time.Duration) *RateLimiter {
 	return &RateLimiter{
 		maxTokens:  int64(maxTokens),
@@ -15,13 +14,11 @@ func NewRateLimiter(maxTokens int, refillRate time.Duration) *RateLimiter {
 	}
 }
 
-// Allow checks if a request is allowed by the rate limiter
 func (rl *RateLimiter) Allow() bool {
 	rl.refillTokens()
 	return rl.consumeToken()
 }
 
-// refillTokens refills tokens based on elapsed time since last refill
 func (rl *RateLimiter) refillTokens() {
 	now := time.Now().UnixNano()
 
@@ -29,7 +26,6 @@ func (rl *RateLimiter) refillTokens() {
 		currentTokens := atomic.LoadInt64(&rl.tokens)
 		lastRefill := atomic.LoadInt64(&rl.lastRefill)
 
-		// Calculate tokens to add
 		elapsed := now - lastRefill
 		tokensToAdd := int64(0)
 		if rl.refillRate > 0 {
@@ -37,7 +33,6 @@ func (rl *RateLimiter) refillTokens() {
 		}
 
 		if tokensToAdd == 0 {
-			// No tokens to add, exit
 			break
 		}
 
@@ -46,22 +41,17 @@ func (rl *RateLimiter) refillTokens() {
 			newTokens = rl.maxTokens
 		}
 
-		// Update last refill time
 		newLastRefill := lastRefill + (tokensToAdd * int64(rl.refillRate))
 
-		// Try to update lastRefill first
 		if !atomic.CompareAndSwapInt64(&rl.lastRefill, lastRefill, newLastRefill) {
-			// If lastRefill changed, retry
 			continue
 		}
 
-		// Now update tokens
 		atomic.StoreInt64(&rl.tokens, newTokens)
 		break
 	}
 }
 
-// consumeToken attempts to consume one token
 func (rl *RateLimiter) consumeToken() bool {
 	for {
 		currentTokens := atomic.LoadInt64(&rl.tokens)
@@ -72,6 +62,5 @@ func (rl *RateLimiter) consumeToken() bool {
 		if atomic.CompareAndSwapInt64(&rl.tokens, currentTokens, currentTokens-1) {
 			return true
 		}
-		// If CAS failed, retry
 	}
 }

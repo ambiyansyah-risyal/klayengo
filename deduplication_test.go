@@ -20,26 +20,19 @@ func TestDeduplicationTracker(t *testing.T) {
 	key := "test-key"
 	_, isOwner := tracker.GetOrCreateEntry(key)
 
-	// First call should be the owner
 	if !isOwner {
 		t.Error("First call should be the owner")
 	}
 
-	// Owner should not wait - it should make the request
-	// Simulate making the request...
-
-	// Complete the entry
 	testResp := &http.Response{StatusCode: 200}
 	testErr := error(nil)
 	tracker.Complete(key, testResp, testErr)
 
-	// Second call should not be the owner
 	entry2, isOwner2 := tracker.GetOrCreateEntry(key)
 	if isOwner2 {
 		t.Error("Second call should not be the owner")
 	}
 
-	// Second caller should wait and get the result
 	resp2, err2 := entry2.Wait(context.Background())
 	if resp2 != testResp || err2 != testErr {
 		t.Errorf("Second waiter should receive result, got resp=%v, err=%v", resp2, err2)
@@ -47,9 +40,8 @@ func TestDeduplicationTracker(t *testing.T) {
 }
 
 func TestDeduplicationIntegration(t *testing.T) {
-	// Create a test server that simulates slow responses
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(100 * time.Millisecond) // Simulate slow response
+		time.Sleep(100 * time.Millisecond)
 		w.WriteHeader(200)
 		if _, err := w.Write([]byte("OK")); err != nil {
 			t.Errorf("Failed to write response: %v", err)
@@ -57,10 +49,9 @@ func TestDeduplicationIntegration(t *testing.T) {
 	}))
 	defer server.Close()
 
-	// Create client with deduplication enabled
 	client := New(
 		WithDeduplication(),
-		WithMaxRetries(0), // Disable retries for this test
+		WithMaxRetries(0),
 	)
 
 	var wg sync.WaitGroup
@@ -68,7 +59,6 @@ func TestDeduplicationIntegration(t *testing.T) {
 	var errors []error
 	var mu sync.Mutex
 
-	// Make 5 concurrent requests to the same endpoint
 	for i := 0; i < 5; i++ {
 		wg.Add(1)
 		go func() {
@@ -85,14 +75,12 @@ func TestDeduplicationIntegration(t *testing.T) {
 
 	wg.Wait()
 
-	// All requests should succeed
 	for i, err := range errors {
 		if err != nil {
 			t.Errorf("Request %d failed: %v", i, err)
 		}
 	}
 
-	// All responses should be valid
 	for i, resp := range responses {
 		if resp == nil {
 			t.Errorf("Request %d got nil response", i)
@@ -113,17 +101,14 @@ func TestDefaultDeduplicationKeyFunc(t *testing.T) {
 	key2 := DefaultDeduplicationKeyFunc(req2)
 	key3 := DefaultDeduplicationKeyFunc(req3)
 
-	// Same method and URL should have same key
 	if key1 != key2 {
 		t.Errorf("Same requests should have same key: %s != %s", key1, key2)
 	}
 
-	// Different method should have different key
 	if key1 == key3 {
 		t.Errorf("Different methods should have different keys: %s == %s", key1, key3)
 	}
 
-	// Key should be non-empty
 	if key1 == "" {
 		t.Error("Key should not be empty")
 	}
@@ -132,19 +117,16 @@ func TestDefaultDeduplicationKeyFunc(t *testing.T) {
 func TestDefaultDeduplicationKeyFuncWithBody(t *testing.T) {
 	bodyContent := "test body content"
 
-	// Test POST with body
 	req1, _ := http.NewRequest("POST", deduplicationTestURL, strings.NewReader(bodyContent))
 	req1.GetBody = func() (io.ReadCloser, error) {
 		return io.NopCloser(strings.NewReader(bodyContent)), nil
 	}
 
-	// Test POST with same body
 	req2, _ := http.NewRequest("POST", deduplicationTestURL, strings.NewReader(bodyContent))
 	req2.GetBody = func() (io.ReadCloser, error) {
 		return io.NopCloser(strings.NewReader(bodyContent)), nil
 	}
 
-	// Test POST with different body
 	req3, _ := http.NewRequest("POST", deduplicationTestURL, strings.NewReader("different body"))
 	req3.GetBody = func() (io.ReadCloser, error) {
 		return io.NopCloser(strings.NewReader("different body")), nil
@@ -154,19 +136,16 @@ func TestDefaultDeduplicationKeyFuncWithBody(t *testing.T) {
 	key2 := DefaultDeduplicationKeyFunc(req2)
 	key3 := DefaultDeduplicationKeyFunc(req3)
 
-	// Same body should have same key
 	if key1 != key2 {
 		t.Errorf("Same POST body should have same key: %s != %s", key1, key2)
 	}
 
-	// Different body should have different key
 	if key1 == key3 {
 		t.Errorf("Different POST body should have different keys: %s == %s", key1, key3)
 	}
 }
 
 func TestDefaultDeduplicationKeyFuncWithBodyError(t *testing.T) {
-	// Test POST with body but GetBody returns error
 	req, _ := http.NewRequest("POST", deduplicationTestURL, strings.NewReader("test"))
 	req.GetBody = func() (io.ReadCloser, error) {
 		return nil, fmt.Errorf("body read error")
@@ -174,7 +153,6 @@ func TestDefaultDeduplicationKeyFuncWithBodyError(t *testing.T) {
 
 	key := DefaultDeduplicationKeyFunc(req)
 
-	// Should still generate a key even with body read error
 	if key == "" {
 		t.Error("Key should not be empty even with body read error")
 	}
@@ -207,8 +185,6 @@ func TestDeduplicationCondition(t *testing.T) {
 		}
 	}
 }
-
-// Benchmark tests for deduplication performance
 
 func BenchmarkDefaultDeduplicationKeyFunc(b *testing.B) {
 	req, _ := http.NewRequest("GET", "https://api.example.com/users/123?param=value", nil)
@@ -244,11 +220,10 @@ func BenchmarkDeduplicationTracker(b *testing.B) {
 }
 
 func TestDeduplicationPerformanceBenefit(t *testing.T) {
-	// This test demonstrates the performance benefit of deduplication
 	callCount := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		callCount++
-		time.Sleep(10 * time.Millisecond) // Simulate network latency
+		time.Sleep(10 * time.Millisecond)
 		w.WriteHeader(http.StatusOK)
 		if _, err := w.Write([]byte("response")); err != nil {
 			t.Errorf("Failed to write response: %v", err)
@@ -258,7 +233,6 @@ func TestDeduplicationPerformanceBenefit(t *testing.T) {
 
 	client := New(WithDeduplication())
 
-	// Make multiple concurrent requests to the same endpoint
 	const numRequests = 10
 	var wg sync.WaitGroup
 	start := time.Now()
@@ -272,20 +246,18 @@ func TestDeduplicationPerformanceBenefit(t *testing.T) {
 				t.Errorf("Request failed: %v", err)
 				return
 			}
-			resp.Body.Close()
+			_ = resp.Body.Close()
 		}()
 	}
 
 	wg.Wait()
 	duration := time.Since(start)
 
-	// Only one actual network request should be made
 	if callCount != 1 {
 		t.Errorf("Expected 1 network call, got %d", callCount)
 	}
 
-	// All requests should complete quickly due to deduplication
-	maxExpectedDuration := 50 * time.Millisecond // Much less than 10ms * 10 = 100ms
+	maxExpectedDuration := 50 * time.Millisecond
 	if duration > maxExpectedDuration {
 		t.Errorf("Requests took too long: %v (expected < %v)", duration, maxExpectedDuration)
 	}

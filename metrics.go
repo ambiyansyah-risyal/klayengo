@@ -8,43 +8,32 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
-// MetricsCollector holds all Prometheus metrics for the HTTP client
 type MetricsCollector struct {
-	// Request metrics
 	requestsTotal    *prometheus.CounterVec
 	requestDuration  *prometheus.HistogramVec
 	requestsInFlight *prometheus.GaugeVec
 
-	// Retry metrics
 	retriesTotal *prometheus.CounterVec
 
-	// Circuit breaker metrics
 	circuitBreakerState *prometheus.GaugeVec
 
-	// Rate limiter metrics
 	rateLimiterTokens *prometheus.GaugeVec
 
-	// Cache metrics
 	cacheHits   *prometheus.CounterVec
 	cacheMisses *prometheus.CounterVec
 	cacheSize   *prometheus.GaugeVec
 
-	// Deduplication metrics
 	deduplicationHits *prometheus.CounterVec
 
-	// Error metrics
 	errorsTotal *prometheus.CounterVec
 
-	// Registry for custom metrics
 	registry *prometheus.Registry
 }
 
-// NewMetricsCollector creates a new metrics collector with default Prometheus registry
 func NewMetricsCollector() *MetricsCollector {
 	return NewMetricsCollectorWithRegistry(prometheus.DefaultRegisterer)
 }
 
-// NewMetricsCollectorWithRegistry creates a new metrics collector with custom registry
 func NewMetricsCollectorWithRegistry(registry prometheus.Registerer) *MetricsCollector {
 	mc := &MetricsCollector{
 		requestsTotal: promauto.With(registry).NewCounterVec(
@@ -131,7 +120,6 @@ func NewMetricsCollectorWithRegistry(registry prometheus.Registerer) *MetricsCol
 	return mc
 }
 
-// RecordRequest records a completed HTTP request
 func (mc *MetricsCollector) RecordRequest(method, endpoint string, statusCode int, duration time.Duration) {
 	if mc == nil {
 		return
@@ -142,7 +130,6 @@ func (mc *MetricsCollector) RecordRequest(method, endpoint string, statusCode in
 	mc.requestDuration.WithLabelValues(method, statusCodeStr, endpoint).Observe(duration.Seconds())
 }
 
-// RecordRequestStart records the start of an HTTP request
 func (mc *MetricsCollector) RecordRequestStart(method, endpoint string) {
 	if mc == nil {
 		return
@@ -151,7 +138,6 @@ func (mc *MetricsCollector) RecordRequestStart(method, endpoint string) {
 	mc.requestsInFlight.WithLabelValues(method, endpoint).Inc()
 }
 
-// RecordRequestEnd records the end of an HTTP request
 func (mc *MetricsCollector) RecordRequestEnd(method, endpoint string) {
 	if mc == nil {
 		return
@@ -160,7 +146,6 @@ func (mc *MetricsCollector) RecordRequestEnd(method, endpoint string) {
 	mc.requestsInFlight.WithLabelValues(method, endpoint).Dec()
 }
 
-// RecordRetry records a retry attempt
 func (mc *MetricsCollector) RecordRetry(method, endpoint string, attempt int) {
 	if mc == nil {
 		return
@@ -170,7 +155,6 @@ func (mc *MetricsCollector) RecordRetry(method, endpoint string, attempt int) {
 	mc.retriesTotal.WithLabelValues(method, endpoint, attemptStr).Inc()
 }
 
-// RecordCircuitBreakerState records the current circuit breaker state
 func (mc *MetricsCollector) RecordCircuitBreakerState(name string, state CircuitState) {
 	if mc == nil {
 		return
@@ -189,7 +173,6 @@ func (mc *MetricsCollector) RecordCircuitBreakerState(name string, state Circuit
 	mc.circuitBreakerState.WithLabelValues(name).Set(stateValue)
 }
 
-// RecordRateLimiterTokens records the current number of available tokens
 func (mc *MetricsCollector) RecordRateLimiterTokens(name string, tokens int) {
 	if mc == nil {
 		return
@@ -198,7 +181,6 @@ func (mc *MetricsCollector) RecordRateLimiterTokens(name string, tokens int) {
 	mc.rateLimiterTokens.WithLabelValues(name).Set(float64(tokens))
 }
 
-// RecordCacheHit records a cache hit
 func (mc *MetricsCollector) RecordCacheHit(method, endpoint string) {
 	if mc == nil {
 		return
@@ -207,7 +189,6 @@ func (mc *MetricsCollector) RecordCacheHit(method, endpoint string) {
 	mc.cacheHits.WithLabelValues(method, endpoint).Inc()
 }
 
-// RecordCacheMiss records a cache miss
 func (mc *MetricsCollector) RecordCacheMiss(method, endpoint string) {
 	if mc == nil {
 		return
@@ -216,7 +197,6 @@ func (mc *MetricsCollector) RecordCacheMiss(method, endpoint string) {
 	mc.cacheMisses.WithLabelValues(method, endpoint).Inc()
 }
 
-// RecordCacheSize records the current cache size
 func (mc *MetricsCollector) RecordCacheSize(name string, size int) {
 	if mc == nil {
 		return
@@ -225,7 +205,6 @@ func (mc *MetricsCollector) RecordCacheSize(name string, size int) {
 	mc.cacheSize.WithLabelValues(name).Set(float64(size))
 }
 
-// RecordError records an error
 func (mc *MetricsCollector) RecordError(errorType, method, endpoint string) {
 	if mc == nil {
 		return
@@ -234,7 +213,6 @@ func (mc *MetricsCollector) RecordError(errorType, method, endpoint string) {
 	mc.errorsTotal.WithLabelValues(errorType, method, endpoint).Inc()
 }
 
-// RecordDeduplicationHit records a deduplication hit
 func (mc *MetricsCollector) RecordDeduplicationHit(method, endpoint string) {
 	if mc == nil {
 		return
@@ -243,7 +221,6 @@ func (mc *MetricsCollector) RecordDeduplicationHit(method, endpoint string) {
 	mc.deduplicationHits.WithLabelValues(method, endpoint).Inc()
 }
 
-// GetRegistry returns the Prometheus registry
 func (mc *MetricsCollector) GetRegistry() *prometheus.Registry {
 	return mc.registry
 }

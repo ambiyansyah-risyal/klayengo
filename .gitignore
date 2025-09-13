@@ -60,6 +60,7 @@ examples/*/*-example
 examples/*/example
 examples/*/advanced
 examples/*/metrics
+example/example
 
 # Test coverage reports
 coverage.html

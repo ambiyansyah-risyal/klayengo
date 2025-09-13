@@ -14,7 +14,6 @@ const (
 )
 
 func TestClientError(t *testing.T) {
-	// Test error without cause
 	err := &ClientError{
 		Type:    "NetworkError",
 		Message: "connection timeout",
@@ -25,7 +24,6 @@ func TestClientError(t *testing.T) {
 		t.Errorf(testErrorFormat, expectedMsg, err.Error())
 	}
 
-	// Test error with cause
 	cause := errors.New("underlying error")
 	errWithCause := &ClientError{
 		Type:    "ServerError",
@@ -104,7 +102,7 @@ func TestClientErrorDebugInfoWithStatusCode(t *testing.T) {
 		URL:        "https://api.example.com/submit",
 		Attempt:    1,
 		MaxRetries: 3,
-		StatusCode: 500, // This should trigger the StatusCode branch
+		StatusCode: 500,
 		Endpoint:   "api.example.com/submit",
 		Cause:      errors.New("server returned 500"),
 	}
@@ -177,7 +175,6 @@ func TestClientErrorTypes(t *testing.T) {
 }
 
 func TestClientErrorFormatting(t *testing.T) {
-	// Test error message formatting with different combinations
 	testCases := []struct {
 		err      *ClientError
 		expected string
@@ -209,7 +206,6 @@ func TestClientErrorFormatting(t *testing.T) {
 }
 
 func TestClientErrorChain(t *testing.T) {
-	// Test error chaining
 	rootCause := errors.New("root cause")
 	middleErr := &ClientError{
 		Type:    "MiddleError",
@@ -222,7 +218,6 @@ func TestClientErrorChain(t *testing.T) {
 		Cause:   middleErr,
 	}
 
-	// Test unwrapping chain
 	if topErr.Unwrap() != middleErr {
 		t.Error("Top error should unwrap to middle error")
 	}
@@ -232,7 +227,6 @@ func TestClientErrorChain(t *testing.T) {
 	}
 
 	if rootCause != errors.New("root cause") {
-		// This comparison is just to use rootCause to avoid unused variable warning
 		_ = rootCause
 	}
 }
@@ -257,10 +251,8 @@ func TestClientErrorIs(t *testing.T) {
 	err1 := &ClientError{Type: "NetworkError", Message: "connection failed"}
 	err2 := &ClientError{Type: "NetworkError", Message: "timeout"}
 
-	// Use err2 to avoid unused variable warning
 	_ = err2
 
-	// Test that errors with same type are considered equal for Is()
 	if !errors.Is(err1, &ClientError{Type: "NetworkError"}) {
 		t.Error("Should match errors with same type")
 	}
@@ -269,41 +261,34 @@ func TestClientErrorIs(t *testing.T) {
 		t.Error("Should not match errors with different types")
 	}
 
-	// Test Is() with non-ClientError target
 	if errors.Is(err1, errors.New("some error")) {
 		t.Error("Should not match non-ClientError types")
 	}
 
-	// Note: errors.Is() works with custom error types when implementing Is() method
 }
 
 func TestClientErrorNilHandling(t *testing.T) {
 	var err *ClientError
 
-	// Test that nil error methods don't panic and return expected values
 	result := err.Error()
 	if result != "<nil>" {
 		t.Errorf("Nil error Error() should return '<nil>', got '%s'", result)
 	}
 
-	// Test Unwrap on nil
 	unwrapped := err.Unwrap()
 	if unwrapped != nil {
 		t.Errorf("Nil error Unwrap() should return nil, got %v", unwrapped)
 	}
 
-	// Test Is on nil - the Type field will be used in the comparison
 	targetErr := &ClientError{Type: "test"}
 	if err.Is(targetErr) {
 		t.Error("Nil error Is() should return false")
 	}
 
-	// Verify the target error has the expected type (to ensure Type field is used)
 	if targetErr.Type != "test" {
 		t.Errorf("Target error type should be 'test', got '%s'", targetErr.Type)
 	}
 
-	// Test DebugInfo on nil
 	debugInfo := err.DebugInfo()
 	if debugInfo != "Error: <nil>" {
 		t.Errorf("Nil error DebugInfo() should return 'Error: <nil>', got '%s'", debugInfo)

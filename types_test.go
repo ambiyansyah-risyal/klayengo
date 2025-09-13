@@ -197,7 +197,6 @@ func TestRoundTripperFunc(t *testing.T) {
 func TestRoundTripperFuncNil(t *testing.T) {
 	var roundTripper RoundTripperFunc
 
-	// Test that calling RoundTrip on nil RoundTripperFunc panics as expected
 	defer func() {
 		if r := recover(); r == nil {
 			t.Error("Expected panic when calling RoundTrip on nil RoundTripperFunc")
@@ -205,7 +204,7 @@ func TestRoundTripperFuncNil(t *testing.T) {
 	}()
 
 	req, _ := http.NewRequest("GET", typesTestURL, nil)
-	_, _ = roundTripper.RoundTrip(req) // Error ignored intentionally - expecting panic
+	_, _ = roundTripper.RoundTrip(req)
 }
 
 func TestMiddlewareType(t *testing.T) {
@@ -246,13 +245,11 @@ func TestRetryConditionType(t *testing.T) {
 		return err != nil
 	})
 
-	// Test with error
 	retry := condition(nil, http.ErrHandlerTimeout)
 	if !retry {
 		t.Error("Expected true for error condition")
 	}
 
-	// Test with response
 	resp := &http.Response{StatusCode: 500}
 	retry = condition(resp, nil)
 	if retry {
@@ -298,7 +295,6 @@ func TestOptionType(t *testing.T) {
 }
 
 func TestCircuitBreakerStateValues(t *testing.T) {
-	// Test that state values are distinct
 	if StateClosed == StateOpen {
 		t.Error("StateClosed should not equal StateOpen")
 	}
@@ -313,7 +309,7 @@ func TestCircuitBreakerStateValues(t *testing.T) {
 }
 
 func TestCircuitBreakerStateType(t *testing.T) {
-	var state CircuitState = StateClosed
+	state := StateClosed
 
 	if state != 0 {
 		t.Errorf("Expected CircuitState(0), got %d", state)
@@ -336,7 +332,6 @@ func TestCacheEntryNilHeader(t *testing.T) {
 		Header: nil,
 	}
 
-	// Should not panic when accessing nil header
 	if entry.Header != nil {
 		t.Error("Expected nil header")
 	}

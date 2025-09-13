@@ -88,8 +88,6 @@ func TestRecordRequest(t *testing.T) {
 
 	collector.RecordRequest(method, endpoint, statusCode, duration)
 
-	// Note: We can't easily test the actual metric values without exposing internal state
-	// but we can verify the method doesn't panic
 }
 
 func TestRecordRequestStart(t *testing.T) {
@@ -101,7 +99,6 @@ func TestRecordRequestStart(t *testing.T) {
 
 	collector.RecordRequestStart(method, endpoint)
 
-	// Verify method doesn't panic
 }
 
 func TestRecordRequestEnd(t *testing.T) {
@@ -113,7 +110,6 @@ func TestRecordRequestEnd(t *testing.T) {
 
 	collector.RecordRequestEnd(method, endpoint)
 
-	// Verify method doesn't panic
 }
 
 func TestRecordRetry(t *testing.T) {
@@ -126,7 +122,6 @@ func TestRecordRetry(t *testing.T) {
 
 	collector.RecordRetry(method, endpoint, attempt)
 
-	// Verify method doesn't panic
 }
 
 func TestRecordCircuitBreakerState(t *testing.T) {
@@ -135,12 +130,10 @@ func TestRecordCircuitBreakerState(t *testing.T) {
 
 	name := "default"
 
-	// Test all states
 	states := []CircuitState{StateClosed, StateOpen, StateHalfOpen}
 
 	for _, state := range states {
 		collector.RecordCircuitBreakerState(name, state)
-		// Verify method doesn't panic
 	}
 }
 
@@ -153,7 +146,6 @@ func TestRecordRateLimiterTokens(t *testing.T) {
 
 	collector.RecordRateLimiterTokens(name, tokens)
 
-	// Verify method doesn't panic
 }
 
 func TestRecordCacheHit(t *testing.T) {
@@ -165,7 +157,6 @@ func TestRecordCacheHit(t *testing.T) {
 
 	collector.RecordCacheHit(method, endpoint)
 
-	// Verify method doesn't panic
 }
 
 func TestRecordCacheMiss(t *testing.T) {
@@ -177,7 +168,6 @@ func TestRecordCacheMiss(t *testing.T) {
 
 	collector.RecordCacheMiss(method, endpoint)
 
-	// Verify method doesn't panic
 }
 
 func TestRecordCacheSize(t *testing.T) {
@@ -189,7 +179,6 @@ func TestRecordCacheSize(t *testing.T) {
 
 	collector.RecordCacheSize(name, size)
 
-	// Verify method doesn't panic
 }
 
 func TestRecordDeduplicationHit(t *testing.T) {
@@ -201,7 +190,6 @@ func TestRecordDeduplicationHit(t *testing.T) {
 
 	collector.RecordDeduplicationHit(method, endpoint)
 
-	// Verify method doesn't panic
 }
 
 func TestGetRegistry(t *testing.T) {
@@ -214,10 +202,8 @@ func TestGetRegistry(t *testing.T) {
 }
 
 func TestMetricsCollectorWithNil(t *testing.T) {
-	// Test that all methods handle nil collector gracefully
 	var collector *MetricsCollector
 
-	// These should not panic
 	collector.RecordRequest("GET", "test", 200, time.Second)
 	collector.RecordRequestStart("GET", "test")
 	collector.RecordRequestEnd("GET", "test")
@@ -246,9 +232,8 @@ func TestMetricsIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Request failed: %v", err)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 
-	// Verify metrics were recorded (we can't check exact values but ensure no panics)
 }
 
 func TestMetricsWithCircuitBreaker(t *testing.T) {
@@ -264,18 +249,16 @@ func TestMetricsWithCircuitBreaker(t *testing.T) {
 			FailureThreshold: 2,
 			RecoveryTimeout:  10 * time.Millisecond,
 		}),
-		WithMaxRetries(0), // Disable retries for this test
+		WithMaxRetries(0),
 	)
 
-	// Make requests that will fail and trigger circuit breaker
 	for i := 0; i < 3; i++ {
 		resp, err := client.Get(context.Background(), server.URL)
 		if err == nil {
-			resp.Body.Close()
+			_ = resp.Body.Close()
 		}
 	}
 
-	// Verify metrics were recorded without panics
 }
 
 func TestMetricsWithRateLimiter(t *testing.T) {
@@ -290,15 +273,13 @@ func TestMetricsWithRateLimiter(t *testing.T) {
 		WithRateLimiter(2, 100*time.Millisecond),
 	)
 
-	// Make requests that will consume rate limiter tokens
 	for i := 0; i < 3; i++ {
 		resp, err := client.Get(context.Background(), server.URL)
 		if err == nil {
-			resp.Body.Close()
+			_ = resp.Body.Close()
 		}
 	}
 
-	// Verify metrics were recorded without panics
 }
 
 func TestMetricsWithCache(t *testing.T) {
@@ -318,25 +299,22 @@ func TestMetricsWithCache(t *testing.T) {
 		WithCache(1*time.Hour),
 	)
 
-	// First request
 	resp1, err := client.Get(context.Background(), server.URL)
 	if err != nil {
 		t.Fatalf("First request failed: %v", err)
 	}
-	resp1.Body.Close()
+	_ = resp1.Body.Close()
 
-	// Second request (should be cached)
 	resp2, err := client.Get(context.Background(), server.URL)
 	if err != nil {
 		t.Fatalf("Second request failed: %v", err)
 	}
-	resp2.Body.Close()
+	_ = resp2.Body.Close()
 
 	if callCount != 1 {
 		t.Errorf("Expected 1 server call (cached), got %d", callCount)
 	}
 
-	// Verify metrics were recorded without panics
 }
 
 func TestMetricsWithRetries(t *testing.T) {
@@ -361,20 +339,18 @@ func TestMetricsWithRetries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Request failed: %v", err)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 
 	if callCount != 3 {
 		t.Errorf("Expected 3 calls (with retries), got %d", callCount)
 	}
 
-	// Verify metrics were recorded without panics
 }
 
 func TestMetricsCollectorInitialization(t *testing.T) {
 	registry := prometheus.NewRegistry()
 	collector := NewMetricsCollectorWithRegistry(registry)
 
-	// Verify all expected metrics are initialized
 	if collector.requestsTotal == nil {
 		t.Error("requestsTotal not initialized")
 	}
@@ -424,34 +400,28 @@ func TestMetricsWithCustomRegistry(t *testing.T) {
 		t.Error("Custom registry not properly set")
 	}
 
-	// Test that metrics work with custom registry
 	collector.RecordRequest("GET", "test", 200, time.Second)
 
-	// Should not panic
 }
 
 func TestMetricsStateTransitions(t *testing.T) {
 	registry := prometheus.NewRegistry()
 	collector := NewMetricsCollectorWithRegistry(registry)
 
-	// Test circuit breaker state transitions
 	states := []CircuitState{StateClosed, StateOpen, StateHalfOpen, StateClosed}
 
 	for _, state := range states {
 		collector.RecordCircuitBreakerState("test", state)
 	}
 
-	// Test rate limiter token changes
 	for tokens := 0; tokens <= 10; tokens++ {
 		collector.RecordRateLimiterTokens("test", tokens)
 	}
 
-	// Test cache size changes
 	for size := 0; size <= 5; size++ {
 		collector.RecordCacheSize("test", size)
 	}
 
-	// Verify no panics occurred
 }
 
 func TestMetricsErrorTypes(t *testing.T) {
@@ -471,7 +441,6 @@ func TestMetricsErrorTypes(t *testing.T) {
 		collector.RecordError(errorType, "GET", testEndpoint)
 	}
 
-	// Verify no panics occurred
 }
 
 func TestMetricsHTTPMethods(t *testing.T) {
@@ -490,7 +459,6 @@ func TestMetricsHTTPMethods(t *testing.T) {
 		collector.RecordError("Test", method, testEndpoint)
 	}
 
-	// Verify no panics occurred
 }
 
 func TestMetricsStatusCodes(t *testing.T) {
@@ -503,5 +471,4 @@ func TestMetricsStatusCodes(t *testing.T) {
 		collector.RecordRequest("GET", testEndpoint, statusCode, time.Millisecond)
 	}
 
-	// Verify no panics occurred
 }

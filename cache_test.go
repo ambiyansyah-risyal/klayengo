@@ -23,7 +23,6 @@ const writeResponseErrorMsg = "Failed to write response: %v"
 const expectedFormatMsg = "Expected '%s', got '%s'"
 const expectedContentTypeFormatMsg = "Expected Content-Type '%s', got '%s'"
 
-// errorReader is a mock reader that always returns an error
 type errorReader struct {
 	err error
 }
@@ -55,13 +54,11 @@ func TestNewInMemoryCache(t *testing.T) {
 func TestInMemoryCacheGet(t *testing.T) {
 	cache := NewInMemoryCache()
 
-	// Test getting non-existent key
 	_, found := cache.Get("nonexistent")
 	if found {
 		t.Error("Expected false for non-existent key")
 	}
 
-	// Set and get a cache entry
 	entry := &CacheEntry{
 		Body:       []byte(testData),
 		StatusCode: 200,
@@ -92,7 +89,7 @@ func TestInMemoryCacheExpiration(t *testing.T) {
 		Body:       []byte(testData),
 		StatusCode: 200,
 		Header:     make(http.Header),
-		ExpiresAt:  time.Now().Add(-1 * time.Hour), // Already expired
+		ExpiresAt:  time.Now().Add(-1 * time.Hour),
 	}
 
 	cache.Set("expired-key", entry, -1*time.Hour)
@@ -114,7 +111,6 @@ func TestInMemoryCacheSet(t *testing.T) {
 
 	cache.Set(testKey, entry, 1*time.Hour)
 
-	// Check if entry exists by trying to get it
 	stored, exists := cache.Get(testKey)
 	if !exists {
 		t.Error("Entry not stored in cache")
@@ -137,7 +133,6 @@ func TestInMemoryCacheDelete(t *testing.T) {
 	cache.Set(testKey, entry, 1*time.Hour)
 	cache.Delete(testKey)
 
-	// Check if entry was deleted
 	_, exists := cache.Get(testKey)
 	if exists {
 		t.Error("Entry should have been deleted")
@@ -147,7 +142,6 @@ func TestInMemoryCacheDelete(t *testing.T) {
 func TestInMemoryCacheClear(t *testing.T) {
 	cache := NewInMemoryCache()
 
-	// Add multiple entries
 	for i := 0; i < 5; i++ {
 		entry := &CacheEntry{
 			Body:       []byte(testData),
@@ -157,7 +151,6 @@ func TestInMemoryCacheClear(t *testing.T) {
 		cache.Set(fmt.Sprintf(keyFormat, i), entry, 1*time.Hour)
 	}
 
-	// Verify entries exist
 	for i := 0; i < 5; i++ {
 		_, exists := cache.Get(fmt.Sprintf(keyFormat, i))
 		if !exists {
@@ -167,7 +160,6 @@ func TestInMemoryCacheClear(t *testing.T) {
 
 	cache.Clear()
 
-	// Verify all entries are cleared
 	for i := 0; i < 5; i++ {
 		_, exists := cache.Get(fmt.Sprintf(keyFormat, i))
 		if exists {
@@ -210,7 +202,6 @@ func TestCreateResponseFromCache(t *testing.T) {
 func TestCreateCacheEntry(t *testing.T) {
 	client := New()
 
-	// Create a mock response
 	resp := &http.Response{
 		StatusCode: 200,
 		Header: http.Header{
@@ -234,7 +225,6 @@ func TestCreateCacheEntry(t *testing.T) {
 		t.Errorf(expectedContentTypeFormatMsg, contentTypeJSON, entry.Header.Get(contentTypeHeader))
 	}
 
-	// Verify original response body is restored
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		t.Fatalf("Failed to read original response body: %v", err)
@@ -248,7 +238,6 @@ func TestCreateCacheEntry(t *testing.T) {
 func TestCreateCacheEntryWithReadError(t *testing.T) {
 	client := New()
 
-	// Create a response with a body that will fail to read
 	resp := &http.Response{
 		StatusCode: 200,
 		Header:     make(http.Header),
@@ -257,7 +246,6 @@ func TestCreateCacheEntryWithReadError(t *testing.T) {
 
 	entry := client.createCacheEntry(resp)
 
-	// Should return nil when body read fails
 	if entry != nil {
 		t.Error("Expected nil entry when body read fails")
 	}
@@ -276,7 +264,7 @@ func TestDefaultCacheKeyFunc(t *testing.T) {
 
 func TestDefaultCacheKeyFuncWithNilURL(t *testing.T) {
 	req, _ := http.NewRequest("GET", "", nil)
-	req.URL = nil // Simulate nil URL
+	req.URL = nil
 
 	key := DefaultCacheKeyFunc(req)
 
@@ -302,20 +290,18 @@ func TestDefaultCacheCondition(t *testing.T) {
 func TestShouldCacheRequestWithContextControl(t *testing.T) {
 	client := New(WithCache(5 * time.Minute))
 
-	// Test with context cache enabled
 	ctx := WithContextCacheEnabled(context.Background())
 	req := (&http.Request{}).WithContext(ctx)
-	req.Method = "POST" // POST would normally not be cached
+	req.Method = "POST"
 	req.URL, _ = req.URL.Parse(testCacheURL)
 
 	if !client.shouldCacheRequest(req) {
 		t.Error("Expected true when context enables caching")
 	}
 
-	// Test with context cache disabled
 	ctx = WithContextCacheDisabled(context.Background())
 	req = (&http.Request{}).WithContext(ctx)
-	req.Method = "GET" // GET would normally be cached
+	req.Method = "GET"
 	req.URL, _ = req.URL.Parse(testCacheURL)
 
 	if client.shouldCacheRequest(req) {
@@ -333,7 +319,6 @@ func TestGetCacheTTLForRequest(t *testing.T) {
 		t.Errorf("Expected TTL 5m, got %v", ttl)
 	}
 
-	// Test with context override
 	ctx := WithContextCacheTTL(context.Background(), 10*time.Minute)
 	req = req.WithContext(ctx)
 
@@ -402,29 +387,26 @@ func TestCachingInDo(t *testing.T) {
 
 	client := New(WithCache(1 * time.Hour))
 
-	// First request should hit the server
 	resp1, err := client.Get(context.Background(), server.URL)
 	if err != nil {
 		t.Fatalf("First request failed: %v", err)
 	}
-	resp1.Body.Close()
+	_ = resp1.Body.Close()
 
 	if callCount != 1 {
 		t.Errorf("Expected 1 server call, got %d", callCount)
 	}
 
-	// Second request should use cache
 	resp2, err := client.Get(context.Background(), server.URL)
 	if err != nil {
 		t.Fatalf("Second request failed: %v", err)
 	}
-	resp2.Body.Close()
+	_ = resp2.Body.Close()
 
 	if callCount != 1 {
 		t.Errorf("Expected still 1 server call (cached), got %d", callCount)
 	}
 
-	// Verify cached response content
 	body, err := io.ReadAll(resp2.Body)
 	if err != nil {
 		t.Fatalf("Failed to read cached response: %v", err)
@@ -446,7 +428,6 @@ func TestCacheWithCustomKeyFunc(t *testing.T) {
 	}))
 	defer server.Close()
 
-	// Custom key function that ignores query parameters
 	customKeyFunc := func(req *http.Request) string {
 		return req.Method + ":" + req.URL.Path
 	}
@@ -456,7 +437,6 @@ func TestCacheWithCustomKeyFunc(t *testing.T) {
 		WithCacheKeyFunc(customKeyFunc),
 	)
 
-	// Make requests with different query parameters but same path
 	url1 := server.URL + "?param1=value1"
 	url2 := server.URL + "?param2=value2"
 
@@ -464,15 +444,14 @@ func TestCacheWithCustomKeyFunc(t *testing.T) {
 	if err != nil {
 		t.Fatalf("First request failed: %v", err)
 	}
-	resp1.Body.Close()
+	_ = resp1.Body.Close()
 
 	resp2, err := client.Get(context.Background(), url2)
 	if err != nil {
 		t.Fatalf("Second request failed: %v", err)
 	}
-	resp2.Body.Close()
+	_ = resp2.Body.Close()
 
-	// Should only call server once due to same cache key
 	if callCount != 1 {
 		t.Errorf("Expected 1 server call (cached), got %d", callCount)
 	}
@@ -489,7 +468,6 @@ func TestCacheWithCustomCondition(t *testing.T) {
 	}))
 	defer server.Close()
 
-	// Custom condition that caches POST requests
 	customCondition := func(req *http.Request) bool {
 		return req.Method == "POST"
 	}
@@ -499,44 +477,38 @@ func TestCacheWithCustomCondition(t *testing.T) {
 		WithCacheCondition(customCondition),
 	)
 
-	// GET request should not be cached
 	resp1, err := client.Get(context.Background(), server.URL)
 	if err != nil {
 		t.Fatalf("GET request failed: %v", err)
 	}
-	resp1.Body.Close()
+	_ = resp1.Body.Close()
 
 	resp2, err := client.Get(context.Background(), server.URL)
 	if err != nil {
 		t.Fatalf("Second GET request failed: %v", err)
 	}
-	resp2.Body.Close()
+	_ = resp2.Body.Close()
 
-	// Should call server twice for GET requests
 	if callCount != 2 {
 		t.Errorf("Expected 2 server calls for GET, got %d", callCount)
 	}
 
-	// POST request should be cached
 	resp3, err := client.Post(context.Background(), server.URL, contentTypeJSON, bytes.NewReader([]byte("{}")))
 	if err != nil {
 		t.Fatalf("POST request failed: %v", err)
 	}
-	resp3.Body.Close()
+	_ = resp3.Body.Close()
 
 	resp4, err := client.Post(context.Background(), server.URL, contentTypeJSON, bytes.NewReader([]byte("{}")))
 	if err != nil {
 		t.Fatalf("Second POST request failed: %v", err)
 	}
-	resp4.Body.Close()
+	_ = resp4.Body.Close()
 
-	// Should call server once more for POST (cached)
 	if callCount != 3 {
 		t.Errorf("Expected 3 server calls total (POST cached), got %d", callCount)
 	}
 }
-
-// Benchmark tests for cache performance
 
 func BenchmarkCacheGet(b *testing.B) {
 	cache := NewInMemoryCache()
