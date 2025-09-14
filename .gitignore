@@ -11,3 +11,4 @@ dist/
 *.swp
 *~
 example/example
+.github/copilot-instructions.md
