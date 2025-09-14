@@ -5,6 +5,7 @@ import (
 	"time"
 )
 
+// NewCircuitBreaker creates a circuit breaker, applying defaults for zero values.
 func NewCircuitBreaker(config CircuitBreakerConfig) *CircuitBreaker {
 	if config.FailureThreshold == 0 {
 		config.FailureThreshold = 5
@@ -25,6 +26,7 @@ func NewCircuitBreaker(config CircuitBreakerConfig) *CircuitBreaker {
 	}
 }
 
+// Allow reports if a request is permitted under current breaker state.
 func (cb *CircuitBreaker) Allow() bool {
 	now := time.Now().UnixNano()
 	state := CircuitState(atomic.LoadInt64(&cb.state))
@@ -48,6 +50,7 @@ func (cb *CircuitBreaker) Allow() bool {
 	}
 }
 
+// RecordFailure increments failure counters and transitions state as needed.
 func (cb *CircuitBreaker) RecordFailure() {
 	now := time.Now().UnixNano()
 	atomic.StoreInt64(&cb.lastFailure, now)
@@ -68,6 +71,7 @@ func (cb *CircuitBreaker) RecordFailure() {
 	}
 }
 
+// RecordSuccess increments success count and may close a half-open breaker.
 func (cb *CircuitBreaker) RecordSuccess() {
 	state := CircuitState(atomic.LoadInt64(&cb.state))
 

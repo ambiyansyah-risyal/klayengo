@@ -24,12 +24,14 @@ type DeduplicationTracker struct {
 	entries map[string]*DeduplicationEntry
 }
 
+// NewDeduplicationTracker returns an in-memory de-duplication tracker.
 func NewDeduplicationTracker() *DeduplicationTracker {
 	return &DeduplicationTracker{
 		entries: make(map[string]*DeduplicationEntry),
 	}
 }
 
+// GetOrCreateEntry returns an existing entry (not owner) or creates a new one (owner=true).
 func (dt *DeduplicationTracker) GetOrCreateEntry(key string) (*DeduplicationEntry, bool) {
 	dt.mu.Lock()
 	defer dt.mu.Unlock()
@@ -49,6 +51,7 @@ func (dt *DeduplicationTracker) GetOrCreateEntry(key string) (*DeduplicationEntr
 	return entry, true
 }
 
+// Complete finalizes an entry and releases waiters.
 func (dt *DeduplicationTracker) Complete(key string, resp *http.Response, err error) {
 	dt.mu.Lock()
 	entry, exists := dt.entries[key]
@@ -71,6 +74,7 @@ func (dt *DeduplicationTracker) Complete(key string, resp *http.Response, err er
 	})
 }
 
+// Wait blocks until the owning request completes or context cancels.
 func (entry *DeduplicationEntry) Wait(ctx context.Context) (*http.Response, error) {
 	select {
 	case <-entry.done:
@@ -86,6 +90,7 @@ func (entry *DeduplicationEntry) Wait(ctx context.Context) (*http.Response, erro
 
 type DeduplicationKeyFunc func(*http.Request) string
 
+// DefaultDeduplicationKeyFunc builds a key from method + URL (+ body hash for mutating verbs).
 func DefaultDeduplicationKeyFunc(req *http.Request) string {
 	h := fnv.New64a()
 	h.Write([]byte(req.Method))
@@ -110,6 +115,7 @@ func DefaultDeduplicationKeyFunc(req *http.Request) string {
 
 type DeduplicationCondition func(req *http.Request) bool
 
+// DefaultDeduplicationCondition enables deduplication for safe idempotent methods.
 func DefaultDeduplicationCondition(req *http.Request) bool {
 	return req.Method == "GET" || req.Method == "HEAD" || req.Method == "OPTIONS"
 }

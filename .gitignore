@@ -1,101 +1,13 @@
-# Binaries for programs and plugins
-*.exe
-*.exe~
-*.dll
-*.so
-*.dylib
-
-# Test binary, built with `go test -c`
-*.test
-
-# Output of the go coverage tool
+# Minimal ignores
 *.out
+*.test
+coverage.*
 *.prof
-
-# Go workspace file
-go.work
-go.work.sum
-
-# Dependency directories
-vendor/
-
-# Go build cache
-.cache/
-
-# IDE and editor files
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# OS generated files
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
-
-# Temporary files
-*.tmp
-*.temp
-
-# Log files
-*.log
-
-# Environment files
-.env
-.env.local
-.env.*.local
-
-# Build artifacts
-dist/
-build/
 bin/
-
-# Example binaries (compiled examples)
-examples/*/*-example
-examples/*/example
-examples/*/advanced
-examples/*/metrics
+dist/
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~
 example/example
-
-# Test coverage reports
-coverage.html
-coverage.xml
-
-# Benchmark results
-benchmarks.txt
-
-# AI and development instructions - EXCLUDE these files
-*.prompt
-*.prompts
-prompt.txt
-prompts.txt
-instructions.txt
-ai-instructions.txt
-development-instructions.txt
-AGENT.md
-AGENTS.md
-CLAUDE.md
-.cursorrules
-.windsurfrules
-.clinerules
-.cursor/rules/**
-.windsurf/rules/**
-.cline/rules/**
-*.ai
-*.claude
-*.cursor
-*.windsurf
-*.cline
-ai-*
-claude-*
-cursor-*
-windsurf-*
-cline-*
-
-# GitHub AI instructions
-.github/copilot-instructions.md

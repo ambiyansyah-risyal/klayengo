@@ -5,6 +5,7 @@ import (
 	"time"
 )
 
+// Error implements error interface.
 func (e *ClientError) Error() string {
 	if e == nil {
 		return "<nil>"
@@ -30,6 +31,7 @@ func (e *ClientError) Error() string {
 	return msg
 }
 
+// Unwrap returns the underlying cause.
 func (e *ClientError) Unwrap() error {
 	if e == nil {
 		return nil
@@ -37,6 +39,7 @@ func (e *ClientError) Unwrap() error {
 	return e.Cause
 }
 
+// Is compares error types for errors.Is.
 func (e *ClientError) Is(target error) bool {
 	if e == nil {
 		return false
@@ -47,6 +50,7 @@ func (e *ClientError) Is(target error) bool {
 	return false
 }
 
+// DebugInfo renders a multi-line string with diagnostic context.
 func (e *ClientError) DebugInfo() string {
 	if e == nil {
 		return "Error: <nil>"

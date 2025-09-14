@@ -30,10 +30,12 @@ type MetricsCollector struct {
 	registry *prometheus.Registry
 }
 
+// NewMetricsCollector creates a metrics collector on the default registerer.
 func NewMetricsCollector() *MetricsCollector {
 	return NewMetricsCollectorWithRegistry(prometheus.DefaultRegisterer)
 }
 
+// NewMetricsCollectorWithRegistry creates a collector using supplied registerer.
 func NewMetricsCollectorWithRegistry(registry prometheus.Registerer) *MetricsCollector {
 	mc := &MetricsCollector{
 		requestsTotal: promauto.With(registry).NewCounterVec(
@@ -120,6 +122,7 @@ func NewMetricsCollectorWithRegistry(registry prometheus.Registerer) *MetricsCol
 	return mc
 }
 
+// RecordRequest records request count and duration.
 func (mc *MetricsCollector) RecordRequest(method, endpoint string, statusCode int, duration time.Duration) {
 	if mc == nil {
 		return
@@ -130,6 +133,7 @@ func (mc *MetricsCollector) RecordRequest(method, endpoint string, statusCode in
 	mc.requestDuration.WithLabelValues(method, statusCodeStr, endpoint).Observe(duration.Seconds())
 }
 
+// RecordRequestStart increments in-flight gauge.
 func (mc *MetricsCollector) RecordRequestStart(method, endpoint string) {
 	if mc == nil {
 		return
@@ -138,6 +142,7 @@ func (mc *MetricsCollector) RecordRequestStart(method, endpoint string) {
 	mc.requestsInFlight.WithLabelValues(method, endpoint).Inc()
 }
 
+// RecordRequestEnd decrements in-flight gauge.
 func (mc *MetricsCollector) RecordRequestEnd(method, endpoint string) {
 	if mc == nil {
 		return
@@ -146,6 +151,7 @@ func (mc *MetricsCollector) RecordRequestEnd(method, endpoint string) {
 	mc.requestsInFlight.WithLabelValues(method, endpoint).Dec()
 }
 
+// RecordRetry increments retry counter for an attempt.
 func (mc *MetricsCollector) RecordRetry(method, endpoint string, attempt int) {
 	if mc == nil {
 		return
@@ -155,6 +161,7 @@ func (mc *MetricsCollector) RecordRetry(method, endpoint string, attempt int) {
 	mc.retriesTotal.WithLabelValues(method, endpoint, attemptStr).Inc()
 }
 
+// RecordCircuitBreakerState sets gauge to breaker state.
 func (mc *MetricsCollector) RecordCircuitBreakerState(name string, state CircuitState) {
 	if mc == nil {
 		return
@@ -173,6 +180,7 @@ func (mc *MetricsCollector) RecordCircuitBreakerState(name string, state Circuit
 	mc.circuitBreakerState.WithLabelValues(name).Set(stateValue)
 }
 
+// RecordRateLimiterTokens sets available token gauge.
 func (mc *MetricsCollector) RecordRateLimiterTokens(name string, tokens int) {
 	if mc == nil {
 		return
@@ -181,6 +189,7 @@ func (mc *MetricsCollector) RecordRateLimiterTokens(name string, tokens int) {
 	mc.rateLimiterTokens.WithLabelValues(name).Set(float64(tokens))
 }
 
+// RecordCacheHit increments cache hit counter.
 func (mc *MetricsCollector) RecordCacheHit(method, endpoint string) {
 	if mc == nil {
 		return
@@ -189,6 +198,7 @@ func (mc *MetricsCollector) RecordCacheHit(method, endpoint string) {
 	mc.cacheHits.WithLabelValues(method, endpoint).Inc()
 }
 
+// RecordCacheMiss increments cache miss counter.
 func (mc *MetricsCollector) RecordCacheMiss(method, endpoint string) {
 	if mc == nil {
 		return
@@ -197,6 +207,7 @@ func (mc *MetricsCollector) RecordCacheMiss(method, endpoint string) {
 	mc.cacheMisses.WithLabelValues(method, endpoint).Inc()
 }
 
+// RecordCacheSize sets cache size gauge.
 func (mc *MetricsCollector) RecordCacheSize(name string, size int) {
 	if mc == nil {
 		return
@@ -205,6 +216,7 @@ func (mc *MetricsCollector) RecordCacheSize(name string, size int) {
 	mc.cacheSize.WithLabelValues(name).Set(float64(size))
 }
 
+// RecordError increments error counter by type.
 func (mc *MetricsCollector) RecordError(errorType, method, endpoint string) {
 	if mc == nil {
 		return
@@ -213,6 +225,7 @@ func (mc *MetricsCollector) RecordError(errorType, method, endpoint string) {
 	mc.errorsTotal.WithLabelValues(errorType, method, endpoint).Inc()
 }
 
+// RecordDeduplicationHit increments de-dup hit counter.
 func (mc *MetricsCollector) RecordDeduplicationHit(method, endpoint string) {
 	if mc == nil {
 		return
@@ -221,6 +234,7 @@ func (mc *MetricsCollector) RecordDeduplicationHit(method, endpoint string) {
 	mc.deduplicationHits.WithLabelValues(method, endpoint).Inc()
 }
 
+// GetRegistry exposes the underlying prometheus registry.
 func (mc *MetricsCollector) GetRegistry() *prometheus.Registry {
 	return mc.registry
 }

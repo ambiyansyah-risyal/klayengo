@@ -5,6 +5,7 @@ import (
 	"time"
 )
 
+// NewRateLimiter returns a token bucket rate limiter.
 func NewRateLimiter(maxTokens int, refillRate time.Duration) *RateLimiter {
 	return &RateLimiter{
 		maxTokens:  int64(maxTokens),
@@ -14,6 +15,7 @@ func NewRateLimiter(maxTokens int, refillRate time.Duration) *RateLimiter {
 	}
 }
 
+// Allow reports whether a token is available (and consumes it if so).
 func (rl *RateLimiter) Allow() bool {
 	rl.refillTokens()
 	return rl.consumeToken()

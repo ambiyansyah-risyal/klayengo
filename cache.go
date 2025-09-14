@@ -20,6 +20,7 @@ type cacheShard struct {
 	store map[string]*CacheEntry
 }
 
+// NewInMemoryCache creates a sharded in-memory cache.
 func NewInMemoryCache() *InMemoryCache {
 	numShards := 16
 	shards := make([]*cacheShard, numShards)
@@ -40,6 +41,7 @@ func (c *InMemoryCache) getShard(key string) *cacheShard {
 	return c.shards[hash.Sum32()%uint32(c.numShards)]
 }
 
+// Get retrieves a cache entry by key if present and not expired.
 func (c *InMemoryCache) Get(key string) (*CacheEntry, bool) {
 	shard := c.getShard(key)
 	shard.mu.RLock()
@@ -58,6 +60,7 @@ func (c *InMemoryCache) Get(key string) (*CacheEntry, bool) {
 	return entry, true
 }
 
+// Set stores a cache entry with ttl.
 func (c *InMemoryCache) Set(key string, entry *CacheEntry, ttl time.Duration) {
 	shard := c.getShard(key)
 	shard.mu.Lock()
@@ -67,6 +70,7 @@ func (c *InMemoryCache) Set(key string, entry *CacheEntry, ttl time.Duration) {
 	shard.store[key] = entry
 }
 
+// Delete removes a key from the cache.
 func (c *InMemoryCache) Delete(key string) {
 	shard := c.getShard(key)
 	shard.mu.Lock()
@@ -75,6 +79,7 @@ func (c *InMemoryCache) Delete(key string) {
 	delete(shard.store, key)
 }
 
+// Clear empties all shards in the cache.
 func (c *InMemoryCache) Clear() {
 	for _, shard := range c.shards {
 		shard.mu.Lock()
@@ -111,6 +116,7 @@ func (c *Client) createCacheEntry(resp *http.Response) *CacheEntry {
 	}
 }
 
+// DefaultCacheKeyFunc builds a cache key from method + full URL string.
 func DefaultCacheKeyFunc(req *http.Request) string {
 	if req.URL == nil {
 		return req.Method + ":"
@@ -124,6 +130,7 @@ func DefaultCacheKeyFunc(req *http.Request) string {
 	return string(buf)
 }
 
+// DefaultCacheCondition caches only GET requests.
 func DefaultCacheCondition(req *http.Request) bool {
 	return req.Method == "GET"
 }
@@ -148,14 +155,17 @@ func (c *Client) getCacheTTLForRequest(req *http.Request) time.Duration {
 	return c.cacheTTL
 }
 
+// WithContextCacheEnabled sets per-request cache override (enabled).
 func WithContextCacheEnabled(ctx context.Context) context.Context {
 	return context.WithValue(ctx, CacheControlKey, &CacheControl{Enabled: true})
 }
 
+// WithContextCacheDisabled sets per-request cache override (disabled).
 func WithContextCacheDisabled(ctx context.Context) context.Context {
 	return context.WithValue(ctx, CacheControlKey, &CacheControl{Enabled: false})
 }
 
+// WithContextCacheTTL sets a custom TTL for this request (implies enabled).
 func WithContextCacheTTL(ctx context.Context, ttl time.Duration) context.Context {
 	cacheControl := &CacheControl{Enabled: true, TTL: ttl}
 	return context.WithValue(ctx, CacheControlKey, cacheControl)

@@ -6,20 +6,25 @@ import (
 	"time"
 )
 
+// RetryCondition returns true if the operation should be retried.
 type RetryCondition func(resp *http.Response, err error) bool
 
+// Middleware composes request handling around the underlying transport.
 type Middleware func(req *http.Request, next RoundTripper) (*http.Response, error)
 
+// RoundTripper minimal interface subset for middleware chaining.
 type RoundTripper interface {
 	RoundTrip(*http.Request) (*http.Response, error)
 }
 
+// CircuitBreakerConfig defines thresholds for circuit breaker transitions.
 type CircuitBreakerConfig struct {
 	FailureThreshold int
 	RecoveryTimeout  time.Duration
 	SuccessThreshold int
 }
 
+// CircuitBreaker is a lock-free state machine implementing open/half-open/closed.
 type CircuitBreaker struct {
 	config      CircuitBreakerConfig
 	state       int64
@@ -36,6 +41,7 @@ const (
 	StateHalfOpen
 )
 
+// CacheEntry stores a cached HTTP response body + metadata.
 type CacheEntry struct {
 	Response   *http.Response
 	Body       []byte
@@ -44,6 +50,7 @@ type CacheEntry struct {
 	ExpiresAt  time.Time
 }
 
+// Cache abstracts a simple TTL key/value store used for responses.
 type Cache interface {
 	Get(key string) (*CacheEntry, bool)
 	Set(key string, entry *CacheEntry, ttl time.Duration)
@@ -51,6 +58,7 @@ type Cache interface {
 	Clear()
 }
 
+// CacheCondition returns true if a request should be cached.
 type CacheCondition func(req *http.Request) bool
 
 type contextKey string
@@ -59,11 +67,13 @@ const (
 	CacheControlKey contextKey = "klayengo_cache_control"
 )
 
+// CacheControl provides per-request overrides for cache behavior.
 type CacheControl struct {
 	Enabled bool
 	TTL     time.Duration
 }
 
+// ClientError wraps contextual information about a request failure.
 type ClientError struct {
 	Type       string
 	Message    string
@@ -91,6 +101,7 @@ const (
 	ErrorTypeValidation  = "ValidationError"
 )
 
+// RateLimiter is a token bucket implementation.
 type RateLimiter struct {
 	tokens     int64
 	maxTokens  int64
@@ -98,8 +109,10 @@ type RateLimiter struct {
 	lastRefill int64
 }
 
+// Option configures a Client instance.
 type Option func(*Client)
 
+// Logger is a minimal structured logging interface.
 type Logger interface {
 	Debug(msg string, args ...interface{})
 	Info(msg string, args ...interface{})
@@ -107,6 +120,7 @@ type Logger interface {
 	Error(msg string, args ...interface{})
 }
 
+// DebugConfig toggles verbose instrumentation for a client instance.
 type DebugConfig struct {
 	Enabled      bool
 	LogRequests  bool
@@ -117,6 +131,7 @@ type DebugConfig struct {
 	RequestIDGen func() string
 }
 
+// DefaultDebugConfig returns a disabled debug configuration.
 func DefaultDebugConfig() *DebugConfig {
 	return &DebugConfig{
 		Enabled:      false,
@@ -135,6 +150,7 @@ func generateRequestID() string {
 
 type SimpleLogger struct{}
 
+// NewSimpleLogger returns a basic stdout logger.
 func NewSimpleLogger() *SimpleLogger {
 	return &SimpleLogger{}
 }
@@ -173,6 +189,7 @@ func (l *SimpleLogger) Error(msg string, args ...interface{}) {
 
 type RoundTripperFunc func(*http.Request) (*http.Response, error)
 
+// RoundTrip implements RoundTripper.
 func (f RoundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 	return f(req)
 }

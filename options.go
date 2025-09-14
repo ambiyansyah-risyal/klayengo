@@ -6,30 +6,35 @@ import (
 	"time"
 )
 
+// WithMaxRetries sets the maximum retry attempts.
 func WithMaxRetries(n int) Option {
 	return func(c *Client) {
 		c.maxRetries = n
 	}
 }
 
+// WithInitialBackoff sets the initial backoff duration.
 func WithInitialBackoff(d time.Duration) Option {
 	return func(c *Client) {
 		c.initialBackoff = d
 	}
 }
 
+// WithMaxBackoff sets the maximum backoff duration.
 func WithMaxBackoff(d time.Duration) Option {
 	return func(c *Client) {
 		c.maxBackoff = d
 	}
 }
 
+// WithBackoffMultiplier sets the exponential backoff multiplier.
 func WithBackoffMultiplier(f float64) Option {
 	return func(c *Client) {
 		c.backoffMultiplier = f
 	}
 }
 
+// WithJitter sets jitter factor (0..1) applied to backoff.
 func WithJitter(f float64) Option {
 	return func(c *Client) {
 		if f < 0 {
@@ -42,12 +47,14 @@ func WithJitter(f float64) Option {
 	}
 }
 
+// WithRateLimiter enables a token bucket rate limiter.
 func WithRateLimiter(maxTokens int, refillRate time.Duration) Option {
 	return func(c *Client) {
 		c.rateLimiter = NewRateLimiter(maxTokens, refillRate)
 	}
 }
 
+// WithCache enables the default in-memory cache with a global TTL.
 func WithCache(ttl time.Duration) Option {
 	return func(c *Client) {
 		c.cache = NewInMemoryCache()
@@ -55,6 +62,7 @@ func WithCache(ttl time.Duration) Option {
 	}
 }
 
+// WithCustomCache supplies a custom cache implementation plus TTL.
 func WithCustomCache(cache Cache, ttl time.Duration) Option {
 	return func(c *Client) {
 		c.cache = cache
@@ -62,18 +70,21 @@ func WithCustomCache(cache Cache, ttl time.Duration) Option {
 	}
 }
 
+// WithCacheKeyFunc overrides the cache key generator.
 func WithCacheKeyFunc(fn func(*http.Request) string) Option {
 	return func(c *Client) {
 		c.cacheKeyFunc = fn
 	}
 }
 
+// WithCacheCondition overrides the cacheable request predicate.
 func WithCacheCondition(fn CacheCondition) Option {
 	return func(c *Client) {
 		c.cacheCondition = fn
 	}
 }
 
+// WithTimeout sets per-request timeout (sets underlying http.Client timeout).
 func WithTimeout(d time.Duration) Option {
 	return func(c *Client) {
 		c.timeout = d
@@ -83,24 +94,28 @@ func WithTimeout(d time.Duration) Option {
 	}
 }
 
+// WithRetryCondition overrides when a response/error should trigger a retry.
 func WithRetryCondition(fn RetryCondition) Option {
 	return func(c *Client) {
 		c.retryCondition = fn
 	}
 }
 
+// WithCircuitBreaker configures a circuit breaker.
 func WithCircuitBreaker(config CircuitBreakerConfig) Option {
 	return func(c *Client) {
 		c.circuitBreaker = NewCircuitBreaker(config)
 	}
 }
 
+// WithMiddleware appends middleware to execution chain (outermost first).
 func WithMiddleware(middleware ...Middleware) Option {
 	return func(c *Client) {
 		c.middleware = append(c.middleware, middleware...)
 	}
 }
 
+// WithHTTPClient supplies a custom *http.Client.
 func WithHTTPClient(client *http.Client) Option {
 	return func(c *Client) {
 		c.httpClient = client
@@ -110,18 +125,21 @@ func WithHTTPClient(client *http.Client) Option {
 	}
 }
 
+// WithMetrics enables metrics collection using default registry.
 func WithMetrics() Option {
 	return func(c *Client) {
 		c.metrics = NewMetricsCollector()
 	}
 }
 
+// WithMetricsCollector injects an existing metrics collector.
 func WithMetricsCollector(collector *MetricsCollector) Option {
 	return func(c *Client) {
 		c.metrics = collector
 	}
 }
 
+// WithDebug enables debug flags using default config.
 func WithDebug() Option {
 	return func(c *Client) {
 		if c.debug == nil {
@@ -131,18 +149,21 @@ func WithDebug() Option {
 	}
 }
 
+// WithDebugConfig sets a custom debug config.
 func WithDebugConfig(config *DebugConfig) Option {
 	return func(c *Client) {
 		c.debug = config
 	}
 }
 
+// WithLogger sets the logger used when debug is enabled.
 func WithLogger(logger Logger) Option {
 	return func(c *Client) {
 		c.logger = logger
 	}
 }
 
+// WithSimpleLogger attaches a minimal stdout logger and enables debug.
 func WithSimpleLogger() Option {
 	return func(c *Client) {
 		if c.debug == nil {
@@ -153,6 +174,7 @@ func WithSimpleLogger() Option {
 	}
 }
 
+// WithRequestIDGenerator overrides the request id generator used in debug logs.
 func WithRequestIDGenerator(gen func() string) Option {
 	return func(c *Client) {
 		if c.debug == nil {
@@ -162,24 +184,28 @@ func WithRequestIDGenerator(gen func() string) Option {
 	}
 }
 
+// WithDeduplication enables in-flight request de-duplication.
 func WithDeduplication() Option {
 	return func(c *Client) {
 		c.deduplication = NewDeduplicationTracker()
 	}
 }
 
+// WithDeduplicationKeyFunc sets custom deduplication key generator.
 func WithDeduplicationKeyFunc(fn DeduplicationKeyFunc) Option {
 	return func(c *Client) {
 		c.dedupKeyFunc = fn
 	}
 }
 
+// WithDeduplicationCondition sets custom predicate for deduplication eligibility.
 func WithDeduplicationCondition(fn DeduplicationCondition) Option {
 	return func(c *Client) {
 		c.dedupCondition = fn
 	}
 }
 
+// ValidateConfiguration performs shallow validation returning aggregated error.
 func (c *Client) ValidateConfiguration() error {
 	var errors []string
 

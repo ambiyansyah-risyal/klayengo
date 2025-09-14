@@ -10,6 +10,9 @@ import (
 	"time"
 )
 
+// Client is a resilient HTTP client that layers retries, circuit breaking,
+// rate limiting, caching, de‑duplication, middleware and metrics around
+// the standard net/http Client. It is safe for concurrent use.
 type Client struct {
 	httpClient        *http.Client
 	maxRetries        int
@@ -35,6 +38,8 @@ type Client struct {
 	validationError   error
 }
 
+// New constructs a Client using the provided functional options. A best effort
+// validation is performed; call IsValid / ValidationError for errors.
 func New(options ...Option) *Client {
 	client := &Client{
 		httpClient: &http.Client{
@@ -73,6 +78,7 @@ func New(options ...Option) *Client {
 	return client
 }
 
+// Get performs an HTTP GET with context.
 func (c *Client) Get(ctx context.Context, url string) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
@@ -81,6 +87,7 @@ func (c *Client) Get(ctx context.Context, url string) (*http.Response, error) {
 	return c.Do(req)
 }
 
+// Post performs an HTTP POST with the given content type.
 func (c *Client) Post(ctx context.Context, url, contentType string, body io.Reader) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, "POST", url, body)
 	if err != nil {
@@ -90,6 +97,7 @@ func (c *Client) Post(ctx context.Context, url, contentType string, body io.Read
 	return c.Do(req)
 }
 
+// Do executes a prepared *http.Request applying all reliability features.
 func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	start := time.Now()
 	endpoint := getEndpointFromRequest(req)
@@ -376,20 +384,24 @@ func (c *Client) createClientError(errorType, message string, cause error, reque
 	}
 }
 
+// IsValid reports whether configuration validation passed at construction.
 func (c *Client) IsValid() bool {
 	return c.validationError == nil
 }
 
+// ValidationError returns the configuration validation error, if any.
 func (c *Client) ValidationError() error {
 	return c.validationError
 }
 
+// ValidateConfigurationStrict panics if configuration is invalid.
 func (c *Client) ValidateConfigurationStrict() {
 	if err := c.ValidateConfiguration(); err != nil {
 		panic(fmt.Sprintf("invalid client configuration: %v", err))
 	}
 }
 
+// MustValidateConfiguration re-runs validation returning an error (no panic).
 func (c *Client) MustValidateConfiguration() error {
 	return c.ValidateConfiguration()
 }
