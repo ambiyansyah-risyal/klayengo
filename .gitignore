@@ -11,5 +11,6 @@ dist/
 *.swp
 *~
 example/example
+testdata/
 .github/copilot-instructions.md
 AGENTS.md

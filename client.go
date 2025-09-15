@@ -20,6 +20,7 @@ type Client struct {
 	maxBackoff        time.Duration
 	backoffMultiplier float64
 	jitter            float64
+	backoffStrategy   BackoffStrategy
 	timeout           time.Duration
 	retryCondition    RetryCondition
 	retryPolicy       RetryPolicy
@@ -52,6 +53,7 @@ func New(options ...Option) *Client {
 		maxBackoff:        10 * time.Second,
 		backoffMultiplier: 2.0,
 		jitter:            0.1,
+		backoffStrategy:   ExponentialJitter, // Default to current behavior
 		timeout:           30 * time.Second,
 		retryCondition:    DefaultRetryCondition,
 		retryPolicy:       nil, // Will use legacy retry logic if nil
@@ -358,10 +360,32 @@ func (c *Client) executeMiddleware(req *http.Request) (*http.Response, error) {
 }
 
 func (c *Client) calculateBackoff(attempt int) time.Duration {
+	switch c.backoffStrategy {
+	case ExponentialJitter:
+		return c.calculateExponentialBackoff(attempt)
+	case DecorrelatedJitter:
+		return c.calculateDecorrelatedBackoff(attempt)
+	default:
+		// Fallback to exponential jitter for unknown strategies
+		return c.calculateExponentialBackoff(attempt)
+	}
+}
+
+func (c *Client) calculateExponentialBackoff(attempt int) time.Duration {
+	if attempt < 0 {
+		attempt = 0
+	}
+
+	// Prevent overflow by limiting attempt
+	if attempt > 30 {
+		attempt = 30
+	}
+
 	backoff := time.Duration(float64(c.initialBackoff) * pow(c.backoffMultiplier, attempt))
-	if backoff > c.maxBackoff {
+	if backoff < 0 || backoff > c.maxBackoff {
 		backoff = c.maxBackoff
 	}
+
 	jitter := c.jitter
 	if jitter < 0 {
 		jitter = 0
@@ -371,9 +395,57 @@ func (c *Client) calculateBackoff(attempt int) time.Duration {
 	}
 	if jitter > 0 {
 		jitterAmount := time.Duration(float64(backoff) * jitter * rand.Float64())
-		backoff += jitterAmount
+		if backoff+jitterAmount > c.maxBackoff {
+			backoff = c.maxBackoff
+		} else {
+			backoff += jitterAmount
+		}
 	}
 	return backoff
+}
+
+func (c *Client) calculateDecorrelatedBackoff(attempt int) time.Duration {
+	// Decorrelated jitter as per AWS: https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/
+	// Formula: random_between(base, min(cap, base * 3))
+	// For subsequent attempts: random_between(base, min(cap, previous_delay * 3))
+
+	if attempt <= 0 {
+		return c.initialBackoff
+	}
+
+	// Prevent overflow by limiting attempt
+	if attempt > 10 {
+		attempt = 10
+	}
+
+	// For decorrelated jitter, we need to track the previous delay
+	// Since we don't have state, we'll use a simplified version:
+	// random_between(base, min(cap, base * 3^attempt))
+
+	base := float64(c.initialBackoff)
+	factor := pow(3.0, attempt) // Use 3x multiplier for decorrelated jitter
+	upper := base * factor
+
+	// Prevent overflow and respect maxBackoff
+	maxBackoffFloat := float64(c.maxBackoff)
+	if upper > maxBackoffFloat || upper < 0 {
+		upper = maxBackoffFloat
+	}
+
+	// Ensure upper is at least base
+	if upper < base {
+		upper = base
+	}
+
+	// Generate random delay between base and upper
+	delay := base + rand.Float64()*(upper-base)
+
+	result := time.Duration(delay)
+	if result < 0 || result > c.maxBackoff {
+		result = c.maxBackoff
+	}
+
+	return result
 }
 
 func pow(base float64, exponent int) float64 {

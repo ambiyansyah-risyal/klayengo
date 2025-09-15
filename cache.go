@@ -10,11 +10,13 @@ import (
 	"time"
 )
 
+// InMemoryCache is a sharded in-memory implementation of Cache with TTL.
 type InMemoryCache struct {
 	shards    []*cacheShard
 	numShards int
 }
 
+// cacheShard holds a portion of the overall cache protected by its own lock.
 type cacheShard struct {
 	mu    sync.RWMutex
 	store map[string]*CacheEntry
@@ -88,6 +90,8 @@ func (c *InMemoryCache) Clear() {
 	}
 }
 
+// createResponseFromCache rebuilds an http.Response from a cache entry,
+// re-wrapping the body for downstream consumption.
 func (c *Client) createResponseFromCache(entry *CacheEntry) *http.Response {
 	resp := &http.Response{
 		StatusCode: entry.StatusCode,
@@ -97,6 +101,7 @@ func (c *Client) createResponseFromCache(entry *CacheEntry) *http.Response {
 	return resp
 }
 
+// createCacheEntry clones a response body and metadata into a cache entry.
 func (c *Client) createCacheEntry(resp *http.Response) *CacheEntry {
 	const maxCacheSize = 10 * 1024 * 1024
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxCacheSize))

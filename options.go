@@ -47,6 +47,13 @@ func WithJitter(f float64) Option {
 	}
 }
 
+// WithBackoffStrategy sets the backoff algorithm for retry delays.
+func WithBackoffStrategy(strategy BackoffStrategy) Option {
+	return func(c *Client) {
+		c.backoffStrategy = strategy
+	}
+}
+
 // WithRateLimiter enables a token bucket rate limiter.
 func WithRateLimiter(maxTokens int, refillRate time.Duration) Option {
 	return func(c *Client) {
@@ -226,6 +233,7 @@ func (c *Client) ValidateConfiguration() error {
 	errors = append(errors, c.validateRetryConfig()...)
 	errors = append(errors, c.validateRetryPolicyConfig()...)
 	errors = append(errors, c.validateRetryBudgetConfig()...)
+	errors = append(errors, c.validateBackoffStrategyConfig()...)
 	errors = append(errors, c.validateRateLimiterConfig()...)
 	errors = append(errors, c.validateCacheConfig()...)
 	errors = append(errors, c.validateCircuitBreakerConfig()...)
@@ -437,6 +445,19 @@ func (c *Client) validateRetryBudgetConfig() []string {
 		if c.retryBudget.perWindow < time.Second {
 			errors = append(errors, "retryBudget perWindow < 1s may cause excessive retry limiting")
 		}
+	}
+
+	return errors
+}
+
+func (c *Client) validateBackoffStrategyConfig() []string {
+	var errors []string
+
+	switch c.backoffStrategy {
+	case ExponentialJitter, DecorrelatedJitter:
+		// Valid strategies - no error
+	default:
+		errors = append(errors, fmt.Sprintf("invalid backoffStrategy: %d", int(c.backoffStrategy)))
 	}
 
 	return errors

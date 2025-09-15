@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// NewDefaultRetryPolicy creates a retry policy with exponential backoff that only
+// NewDefaultRetryPolicy creates a retry policy with configurable backoff strategy that only
 // retries idempotent methods by default.
 func NewDefaultRetryPolicy(maxRetries int, initialBackoff, maxBackoff time.Duration, multiplier, jitter float64) *DefaultRetryPolicy {
 	return &DefaultRetryPolicy{
@@ -18,6 +18,20 @@ func NewDefaultRetryPolicy(maxRetries int, initialBackoff, maxBackoff time.Durat
 		maxBackoff:        maxBackoff,
 		backoffMultiplier: multiplier,
 		jitter:            jitter,
+		backoffStrategy:   ExponentialJitter, // Default to current behavior
+		isIdempotent:      DefaultIsIdempotent,
+	}
+}
+
+// NewDefaultRetryPolicyWithStrategy creates a retry policy with a specific backoff strategy.
+func NewDefaultRetryPolicyWithStrategy(maxRetries int, initialBackoff, maxBackoff time.Duration, multiplier, jitter float64, strategy BackoffStrategy) *DefaultRetryPolicy {
+	return &DefaultRetryPolicy{
+		maxRetries:        maxRetries,
+		initialBackoff:    initialBackoff,
+		maxBackoff:        maxBackoff,
+		backoffMultiplier: multiplier,
+		jitter:            jitter,
+		backoffStrategy:   strategy,
 		isIdempotent:      DefaultIsIdempotent,
 	}
 }
@@ -101,8 +115,29 @@ func parseRetryAfter(value string) time.Duration {
 }
 
 func (p *DefaultRetryPolicy) calculateBackoff(attempt int) time.Duration {
+	switch p.backoffStrategy {
+	case ExponentialJitter:
+		return p.calculateExponentialBackoff(attempt)
+	case DecorrelatedJitter:
+		return p.calculateDecorrelatedBackoff(attempt)
+	default:
+		// Fallback to exponential jitter for unknown strategies
+		return p.calculateExponentialBackoff(attempt)
+	}
+}
+
+func (p *DefaultRetryPolicy) calculateExponentialBackoff(attempt int) time.Duration {
+	if attempt < 0 {
+		attempt = 0
+	}
+
+	// Prevent overflow by limiting attempt
+	if attempt > 30 {
+		attempt = 30
+	}
+
 	backoff := time.Duration(float64(p.initialBackoff) * pow(p.backoffMultiplier, attempt))
-	if backoff > p.maxBackoff {
+	if backoff < 0 || backoff > p.maxBackoff {
 		backoff = p.maxBackoff
 	}
 
@@ -115,9 +150,57 @@ func (p *DefaultRetryPolicy) calculateBackoff(attempt int) time.Duration {
 	}
 	if jitter > 0 {
 		jitterAmount := time.Duration(float64(backoff) * jitter * rand.Float64())
-		backoff += jitterAmount
+		if backoff+jitterAmount > p.maxBackoff {
+			backoff = p.maxBackoff
+		} else {
+			backoff += jitterAmount
+		}
 	}
 	return backoff
+}
+
+func (p *DefaultRetryPolicy) calculateDecorrelatedBackoff(attempt int) time.Duration {
+	// Decorrelated jitter as per AWS: https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/
+	// Formula: random_between(base, min(cap, base * 3))
+	// For subsequent attempts: random_between(base, min(cap, previous_delay * 3))
+
+	if attempt <= 0 {
+		return p.initialBackoff
+	}
+
+	// Prevent overflow by limiting attempt
+	if attempt > 10 {
+		attempt = 10
+	}
+
+	// For decorrelated jitter, we need to track the previous delay
+	// Since we don't have state, we'll use a simplified version:
+	// random_between(base, min(cap, base * 3^attempt))
+
+	base := float64(p.initialBackoff)
+	factor := pow(3.0, attempt) // Use 3x multiplier for decorrelated jitter
+	upper := base * factor
+
+	// Prevent overflow and respect maxBackoff
+	maxBackoffFloat := float64(p.maxBackoff)
+	if upper > maxBackoffFloat || upper < 0 {
+		upper = maxBackoffFloat
+	}
+
+	// Ensure upper is at least base
+	if upper < base {
+		upper = base
+	}
+
+	// Generate random delay between base and upper
+	delay := base + rand.Float64()*(upper-base)
+
+	result := time.Duration(delay)
+	if result < 0 || result > p.maxBackoff {
+		result = p.maxBackoff
+	}
+
+	return result
 }
 
 // NewRetryBudget creates a new retry budget tracker.

@@ -90,15 +90,25 @@ type ClientError struct {
 }
 
 const (
-	ErrorTypeNetwork             = "NetworkError"
-	ErrorTypeTimeout             = "TimeoutError"
-	ErrorTypeRateLimit           = "RateLimitError"
-	ErrorTypeCircuitOpen         = "CircuitBreakerError"
-	ErrorTypeServer              = "ServerError"
-	ErrorTypeClient              = "ClientError"
-	ErrorTypeCache               = "CacheError"
-	ErrorTypeConfig              = "ConfigurationError"
-	ErrorTypeValidation          = "ValidationError"
+	// ErrorTypeNetwork classifies network-related failures (I/O, DNS, connection).
+	ErrorTypeNetwork = "NetworkError"
+	// ErrorTypeTimeout classifies request timeout failures.
+	ErrorTypeTimeout = "TimeoutError"
+	// ErrorTypeRateLimit classifies rate limiter denials.
+	ErrorTypeRateLimit = "RateLimitError"
+	// ErrorTypeCircuitOpen classifies open circuit breaker denials.
+	ErrorTypeCircuitOpen = "CircuitBreakerError"
+	// ErrorTypeServer classifies 5xx server responses.
+	ErrorTypeServer = "ServerError"
+	// ErrorTypeClient classifies 4xx client responses or validation at request level.
+	ErrorTypeClient = "ClientError"
+	// ErrorTypeCache classifies cache-related failures.
+	ErrorTypeCache = "CacheError"
+	// ErrorTypeConfig classifies configuration errors during setup.
+	ErrorTypeConfig = "ConfigurationError"
+	// ErrorTypeValidation classifies aggregated validation errors.
+	ErrorTypeValidation = "ValidationError"
+	// ErrorTypeRetryBudgetExceeded indicates retry was denied due to budget exhaustion.
 	ErrorTypeRetryBudgetExceeded = "RetryBudgetExceededError"
 )
 
@@ -209,14 +219,37 @@ type RetryBudget struct {
 	windowStart int64
 }
 
-// DefaultRetryPolicy implements the standard retry policy with exponential backoff.
+// DefaultRetryPolicy implements the standard retry policy with configurable backoff strategy.
 type DefaultRetryPolicy struct {
 	maxRetries        int
 	initialBackoff    time.Duration
 	maxBackoff        time.Duration
 	backoffMultiplier float64
 	jitter            float64
+	backoffStrategy   BackoffStrategy
 	isIdempotent      func(method string) bool
+}
+
+// BackoffStrategy defines the algorithm used for calculating retry delays.
+type BackoffStrategy int
+
+const (
+	// ExponentialJitter applies exponential backoff with uniform jitter (current default).
+	ExponentialJitter BackoffStrategy = iota
+	// DecorrelatedJitter applies decorrelated jitter as per AWS paper for smoother tail latencies.
+	DecorrelatedJitter
+)
+
+// String returns the string representation of the BackoffStrategy.
+func (bs BackoffStrategy) String() string {
+	switch bs {
+	case ExponentialJitter:
+		return "ExponentialJitter"
+	case DecorrelatedJitter:
+		return "DecorrelatedJitter"
+	default:
+		return "Unknown"
+	}
 }
 
 // ErrRetryBudgetExceeded is returned when the retry budget is exhausted.

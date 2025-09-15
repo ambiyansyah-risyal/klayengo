@@ -11,6 +11,7 @@ import (
 	"time"
 )
 
+// DeduplicationEntry represents an in-flight request shared between callers.
 type DeduplicationEntry struct {
 	response *http.Response
 	err      error
@@ -19,6 +20,7 @@ type DeduplicationEntry struct {
 	waiters  int
 }
 
+// DeduplicationTracker tracks in-flight requests to coalesce duplicates.
 type DeduplicationTracker struct {
 	mu      sync.RWMutex
 	entries map[string]*DeduplicationEntry
@@ -88,6 +90,7 @@ func (entry *DeduplicationEntry) Wait(ctx context.Context) (*http.Response, erro
 	}
 }
 
+// DeduplicationKeyFunc builds a key for identifying identical in-flight requests.
 type DeduplicationKeyFunc func(*http.Request) string
 
 // DefaultDeduplicationKeyFunc builds a key from method + URL (+ body hash for mutating verbs).
@@ -113,6 +116,7 @@ func DefaultDeduplicationKeyFunc(req *http.Request) string {
 	return fmt.Sprintf("%x", h.Sum64())
 }
 
+// DeduplicationCondition decides whether a request is eligible for deduplication.
 type DeduplicationCondition func(req *http.Request) bool
 
 // DefaultDeduplicationCondition enables deduplication for safe idempotent methods.

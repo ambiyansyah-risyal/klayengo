@@ -7,7 +7,7 @@
 
 ## ✨ Features
 
-- 🔄 **Retry Logic** - Exponential backoff with jitter and custom retry conditions
+- 🔄 **Retry Logic** - Configurable backoff strategies (exponential/decorrelated jitter) and custom retry conditions
 - 🚦 **Rate Limiting** - Token bucket algorithm with configurable limits
 - 💾 **Response Caching** - In-memory HTTP response caching with TTL
 - ⚡ **Circuit Breaker** - Fail-fast pattern with automatic recovery
@@ -89,6 +89,47 @@ client := klayengo.New(
     klayengo.WithTimeout(30*time.Second),
 )
 ```
+
+### Backoff Strategies
+
+klayengo supports different backoff strategies for retry delays to optimize for different scenarios:
+
+```go
+// Exponential Jitter (default) - stable, predictable backoff
+client := klayengo.New(
+    klayengo.WithBackoffStrategy(klayengo.ExponentialJitter),
+    klayengo.WithMaxRetries(5),
+    klayengo.WithInitialBackoff(100*time.Millisecond),
+    klayengo.WithMaxBackoff(10*time.Second),
+    klayengo.WithJitter(0.1),
+)
+
+// Decorrelated Jitter - smoother tail latencies, avoids synchronized retry storms
+client := klayengo.New(
+    klayengo.WithBackoffStrategy(klayengo.DecorrelatedJitter),
+    klayengo.WithMaxRetries(5),
+    klayengo.WithInitialBackoff(100*time.Millisecond),
+    klayengo.WithMaxBackoff(10*time.Second),
+)
+
+// With custom retry policy - backoff strategy applies within the policy
+customPolicy := klayengo.NewDefaultRetryPolicyWithStrategy(
+    5,                                    // maxRetries
+    100*time.Millisecond,                // initialBackoff  
+    30*time.Second,                      // maxBackoff
+    2.0,                                 // multiplier
+    0.1,                                 // jitter
+    klayengo.DecorrelatedJitter,         // strategy
+)
+
+client := klayengo.New(
+    klayengo.WithRetryPolicy(customPolicy),
+)
+```
+
+**When to use which strategy:**
+- **ExponentialJitter**: Default choice for most applications. Provides predictable, stable backoff with uniform jitter.
+- **DecorrelatedJitter**: Use when you need smoother tail latencies and want to minimize synchronized retry storms across multiple clients. Particularly useful in high-throughput scenarios with many concurrent clients.
 
 ### Custom Middleware
 
@@ -283,6 +324,7 @@ go run main.go
 | `WithMaxBackoff(d)` | Maximum retry backoff | 10s |
 | `WithBackoffMultiplier(f)` | Backoff multiplier | 2.0 |
 | `WithJitter(f)` | Jitter factor (0-1) | 0.1 |
+| `WithBackoffStrategy(s)` | Backoff algorithm (ExponentialJitter/DecorrelatedJitter) | ExponentialJitter |
 | `WithTimeout(d)` | Request timeout | 30s |
 | `WithRateLimiter(tokens, interval)` | Rate limiting | None |
 | `WithCache(ttl)` | Response caching | None |
