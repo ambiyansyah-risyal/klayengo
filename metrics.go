@@ -9,6 +9,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
+// MetricsCollector provides Prometheus metrics for klayengo's request lifecycle
+// and reliability layers. It is safe for concurrent use.
 type MetricsCollector struct {
 	requestsTotal    *prometheus.CounterVec
 	requestDuration  *prometheus.HistogramVec

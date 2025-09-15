@@ -90,15 +90,25 @@ type ClientError struct {
 }
 
 const (
-	ErrorTypeNetwork             = "NetworkError"
-	ErrorTypeTimeout             = "TimeoutError"
-	ErrorTypeRateLimit           = "RateLimitError"
-	ErrorTypeCircuitOpen         = "CircuitBreakerError"
-	ErrorTypeServer              = "ServerError"
-	ErrorTypeClient              = "ClientError"
-	ErrorTypeCache               = "CacheError"
-	ErrorTypeConfig              = "ConfigurationError"
-	ErrorTypeValidation          = "ValidationError"
+	// ErrorTypeNetwork classifies network-related failures (I/O, DNS, connection).
+	ErrorTypeNetwork = "NetworkError"
+	// ErrorTypeTimeout classifies request timeout failures.
+	ErrorTypeTimeout = "TimeoutError"
+	// ErrorTypeRateLimit classifies rate limiter denials.
+	ErrorTypeRateLimit = "RateLimitError"
+	// ErrorTypeCircuitOpen classifies open circuit breaker denials.
+	ErrorTypeCircuitOpen = "CircuitBreakerError"
+	// ErrorTypeServer classifies 5xx server responses.
+	ErrorTypeServer = "ServerError"
+	// ErrorTypeClient classifies 4xx client responses or validation at request level.
+	ErrorTypeClient = "ClientError"
+	// ErrorTypeCache classifies cache-related failures.
+	ErrorTypeCache = "CacheError"
+	// ErrorTypeConfig classifies configuration errors during setup.
+	ErrorTypeConfig = "ConfigurationError"
+	// ErrorTypeValidation classifies aggregated validation errors.
+	ErrorTypeValidation = "ValidationError"
+	// ErrorTypeRetryBudgetExceeded indicates retry was denied due to budget exhaustion.
 	ErrorTypeRetryBudgetExceeded = "RetryBudgetExceededError"
 )
 
