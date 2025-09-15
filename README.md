@@ -229,6 +229,7 @@ When metrics are enabled, klayengo exposes the following Prometheus metrics:
 - `klayengo_cache_misses_total` - Cache miss count
 - `klayengo_cache_size` - Current cache size
 - `klayengo_deduplication_hits_total` - Request deduplication hits
+- `klayengo_retry_budget_exceeded_total` - Retry attempts denied due to retry budget exhaustion (label: host)
 - `klayengo_errors_total` - Errors by type (Network, Server, RateLimit, etc.)
 
 ### Debug Logging
@@ -242,6 +243,28 @@ client := klayengo.New(
 )
 ```
 
+### Advanced Retry: Policy and Budget
+
+```go
+// Define a custom retry policy (overrides legacy backoff knobs when provided)
+type MyPolicy struct{}
+
+func (p MyPolicy) ShouldRetry(resp *http.Response, err error, attempt int) (time.Duration, bool) {
+    if err != nil || (resp != nil && resp.StatusCode >= 500) {
+        // constant 200ms delay up to 5 attempts
+        if attempt < 5 {
+            return 200 * time.Millisecond, true
+        }
+    }
+    return 0, false
+}
+
+client := klayengo.New(
+    klayengo.WithRetryPolicy(MyPolicy{}),
+    // Budget: allow up to 10 retries per minute across calls
+    klayengo.WithRetryBudget(10, time.Minute),
+)
+```
 ## 🧪 Testing
 
 Run the comprehensive example to see all features in action:
@@ -264,6 +287,8 @@ go run main.go
 | `WithRateLimiter(tokens, interval)` | Rate limiting | None |
 | `WithCache(ttl)` | Response caching | None |
 | `WithCircuitBreaker(config)` | Circuit breaker | Disabled |
+| `WithRetryPolicy(policy)` | Custom retry policy (overrides legacy knobs) | None |
+| `WithRetryBudget(max, window)` | Cap retries per time window | None |
 | `WithDeduplication()` | Request deduplication | Disabled |
 | `WithMetrics()` | Prometheus metrics | Disabled |
 | `WithMiddleware(...)` | Custom middleware | None |
