@@ -30,7 +30,9 @@ const (
 )
 
 const (
-	ErrMsgExpectedContains = "Expected error to contain '%s', got: %v"
+	ErrMsgExpectedContains       = "Expected error to contain '%s', got: %v"
+	ErrMsgExpectedInvalid        = "Expected configuration to be invalid"
+	ErrMsgExpectedInvalidExtreme = "Expected configuration to be invalid due to extreme values"
 )
 
 func TestWithMaxRetries(t *testing.T) {
@@ -290,6 +292,15 @@ func TestWithMetrics(t *testing.T) {
 	}
 }
 
+// Lightweight test ensuring WithMetrics() option constructor itself does not panic
+// (full metrics behavior covered elsewhere with custom registry to avoid duplicate global registration).
+func TestWithMetricsOptionLight(t *testing.T) {
+	// Just assert the option factory returns a non-nil functional option.
+	if WithMetrics() == nil {
+		t.Error("WithMetrics should return a non-nil option")
+	}
+}
+
 func TestWithMetricsCollector(t *testing.T) {
 	registry := prometheus.NewRegistry()
 	customCollector := NewMetricsCollectorWithRegistry(registry)
@@ -520,7 +531,7 @@ func TestValidateConfigurationRetryErrors(t *testing.T) {
 				}
 			} else {
 				if client.IsValid() {
-					t.Error("Expected configuration to be invalid")
+					t.Error(ErrMsgExpectedInvalid)
 				}
 				if !strings.Contains(client.ValidationError().Error(), tt.errorMsg) {
 					t.Errorf(ErrMsgExpectedContains, tt.errorMsg, client.ValidationError())
@@ -552,7 +563,7 @@ func TestValidateConfigurationRateLimiterErrors(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			client := New(tt.options...)
 			if client.IsValid() {
-				t.Error("Expected configuration to be invalid")
+				t.Error(ErrMsgExpectedInvalid)
 			}
 			if !strings.Contains(client.ValidationError().Error(), tt.errorMsg) {
 				t.Errorf("Expected error to contain '%s', got: %v", tt.errorMsg, client.ValidationError())
@@ -564,7 +575,7 @@ func TestValidateConfigurationRateLimiterErrors(t *testing.T) {
 func TestValidateConfigurationCacheErrors(t *testing.T) {
 	client := New(WithCache(0))
 	if client.IsValid() {
-		t.Error("Expected configuration to be invalid")
+		t.Error(ErrMsgExpectedInvalid)
 	}
 	if !strings.Contains(client.ValidationError().Error(), ErrMsgCacheTTLPositive) {
 		t.Errorf("Expected error to contain '%s', got: %v", ErrMsgCacheTTLPositive, client.ValidationError())
@@ -615,7 +626,7 @@ func TestValidateConfigurationDebugErrors(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			client := New(tt.options...)
 			if client.IsValid() {
-				t.Error("Expected configuration to be invalid")
+				t.Error(ErrMsgExpectedInvalid)
 			}
 			if !strings.Contains(client.ValidationError().Error(), tt.errorMsg) {
 				t.Errorf("Expected error to contain '%s', got: %v", tt.errorMsg, client.ValidationError())
@@ -627,7 +638,7 @@ func TestValidateConfigurationDebugErrors(t *testing.T) {
 func TestValidateConfigurationMiddlewareErrors(t *testing.T) {
 	client := New(WithMiddleware(nil))
 	if client.IsValid() {
-		t.Error("Expected configuration to be invalid")
+		t.Error(ErrMsgExpectedInvalid)
 	}
 	if !strings.Contains(client.ValidationError().Error(), ErrMsgMiddlewareNil) {
 		t.Errorf("Expected error to contain '%s', got: %v", ErrMsgMiddlewareNil, client.ValidationError())
@@ -642,7 +653,7 @@ func TestValidateConfigurationMultipleErrors(t *testing.T) {
 	)
 
 	if client.IsValid() {
-		t.Error("Expected configuration to be invalid")
+		t.Error(ErrMsgExpectedInvalid)
 	}
 
 	err := client.ValidationError()
@@ -711,7 +722,7 @@ func TestValidateConfigurationExtremeValues(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			client := New(tt.options...)
 			if client.IsValid() {
-				t.Error("Expected configuration to be invalid due to extreme values")
+				t.Error(ErrMsgExpectedInvalidExtreme)
 			}
 			if !strings.Contains(client.ValidationError().Error(), tt.errorMsg) {
 				t.Errorf("Expected error to contain '%s', got: %v", tt.errorMsg, client.ValidationError())

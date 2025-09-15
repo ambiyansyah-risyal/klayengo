@@ -22,6 +22,8 @@ type Client struct {
 	jitter            float64
 	timeout           time.Duration
 	retryCondition    RetryCondition
+	retryPolicy       RetryPolicy
+	retryBudget       *RetryBudget
 	circuitBreaker    *CircuitBreaker
 	middleware        []Middleware
 	rateLimiter       *RateLimiter
@@ -52,6 +54,8 @@ func New(options ...Option) *Client {
 		jitter:            0.1,
 		timeout:           30 * time.Second,
 		retryCondition:    DefaultRetryCondition,
+		retryPolicy:       nil, // Will use legacy retry logic if nil
+		retryBudget:       nil,
 		circuitBreaker:    NewCircuitBreaker(CircuitBreakerConfig{}),
 		middleware:        []Middleware{},
 		rateLimiter:       nil,
@@ -295,14 +299,36 @@ func (c *Client) doWithRetry(req *http.Request, attempt int, requestID string, s
 		}
 	}
 
-	if attempt < c.maxRetries && c.retryCondition(resp, err) {
-		backoff := c.calculateBackoff(attempt)
+	// Check retry eligibility using either new RetryPolicy or legacy condition
+	var shouldRetry bool
+	var delay time.Duration
 
-		if c.debug != nil && c.debug.Enabled && c.debug.LogRetries && c.logger != nil {
-			c.logger.Info("Scheduling retry", "requestID", requestID, "attempt", attempt+1, "backoff", backoff, "endpoint", endpoint)
+	if c.retryPolicy != nil {
+		delay, shouldRetry = c.retryPolicy.ShouldRetry(resp, err, attempt)
+	} else {
+		shouldRetry = attempt < c.maxRetries && c.retryCondition(resp, err)
+		if shouldRetry {
+			delay = c.calculateBackoff(attempt)
+		}
+	}
+
+	if shouldRetry {
+		// Check retry budget if configured
+		if c.retryBudget != nil && !c.retryBudget.Allow() {
+			if c.metrics != nil {
+				c.metrics.RecordRetryBudgetExceeded(endpoint)
+			}
+			if c.debug != nil && c.debug.Enabled && c.debug.LogRetries && c.logger != nil {
+				c.logger.Warn("Retry budget exceeded", "requestID", requestID, "endpoint", endpoint)
+			}
+			return nil, c.createClientError(ErrorTypeRetryBudgetExceeded, "retry budget exceeded", nil, requestID, req, attempt, time.Since(startTime))
 		}
 
-		time.Sleep(backoff)
+		if c.debug != nil && c.debug.Enabled && c.debug.LogRetries && c.logger != nil {
+			c.logger.Info("Scheduling retry", "requestID", requestID, "attempt", attempt+1, "backoff", delay, "endpoint", endpoint)
+		}
+
+		time.Sleep(delay)
 		return c.doWithRetry(req, attempt+1, requestID, startTime)
 	}
 

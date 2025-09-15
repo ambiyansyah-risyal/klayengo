@@ -2,6 +2,7 @@ package klayengo
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 )
@@ -388,4 +389,20 @@ func TestCacheControlZeroTTL(t *testing.T) {
 	if control.TTL != 0 {
 		t.Errorf("Expected TTL=0, got %v", control.TTL)
 	}
+}
+
+// --- Logger & Request ID (migrated from coverage_test.go) ---
+func TestGenerateRequestIDFormat(t *testing.T) {
+	id := generateRequestID()
+	if len(id) < 5 || !strings.HasPrefix(id, "req_") {
+		t.Errorf("Expected request ID with 'req_' prefix, got %s", id)
+	}
+}
+
+func TestSimpleLoggerBasicCalls(t *testing.T) {
+	logger := NewSimpleLogger()
+	logger.Debug("dbg")
+	logger.Info("info")
+	logger.Warn("warn")
+	logger.Error("err")
 }

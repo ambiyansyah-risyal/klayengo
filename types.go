@@ -90,15 +90,16 @@ type ClientError struct {
 }
 
 const (
-	ErrorTypeNetwork     = "NetworkError"
-	ErrorTypeTimeout     = "TimeoutError"
-	ErrorTypeRateLimit   = "RateLimitError"
-	ErrorTypeCircuitOpen = "CircuitBreakerError"
-	ErrorTypeServer      = "ServerError"
-	ErrorTypeClient      = "ClientError"
-	ErrorTypeCache       = "CacheError"
-	ErrorTypeConfig      = "ConfigurationError"
-	ErrorTypeValidation  = "ValidationError"
+	ErrorTypeNetwork             = "NetworkError"
+	ErrorTypeTimeout             = "TimeoutError"
+	ErrorTypeRateLimit           = "RateLimitError"
+	ErrorTypeCircuitOpen         = "CircuitBreakerError"
+	ErrorTypeServer              = "ServerError"
+	ErrorTypeClient              = "ClientError"
+	ErrorTypeCache               = "CacheError"
+	ErrorTypeConfig              = "ConfigurationError"
+	ErrorTypeValidation          = "ValidationError"
+	ErrorTypeRetryBudgetExceeded = "RetryBudgetExceededError"
 )
 
 // RateLimiter is a token bucket implementation.
@@ -192,4 +193,34 @@ type RoundTripperFunc func(*http.Request) (*http.Response, error)
 // RoundTrip implements RoundTripper.
 func (f RoundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 	return f(req)
+}
+
+// RetryPolicy determines retry behavior including delays and retry conditions.
+type RetryPolicy interface {
+	ShouldRetry(resp *http.Response, err error, attempt int) (delay time.Duration, ok bool)
+}
+
+// RetryBudget tracks retry attempts within time windows to prevent thundering herd.
+type RetryBudget struct {
+	maxRetries  int64
+	perWindow   time.Duration
+	window      int64
+	current     int64
+	windowStart int64
+}
+
+// DefaultRetryPolicy implements the standard retry policy with exponential backoff.
+type DefaultRetryPolicy struct {
+	maxRetries        int
+	initialBackoff    time.Duration
+	maxBackoff        time.Duration
+	backoffMultiplier float64
+	jitter            float64
+	isIdempotent      func(method string) bool
+}
+
+// ErrRetryBudgetExceeded is returned when the retry budget is exhausted.
+var ErrRetryBudgetExceeded = &ClientError{
+	Type:    ErrorTypeRetryBudgetExceeded,
+	Message: "retry budget exceeded",
 }
