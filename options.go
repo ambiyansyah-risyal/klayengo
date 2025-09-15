@@ -101,6 +101,20 @@ func WithRetryCondition(fn RetryCondition) Option {
 	}
 }
 
+// WithRetryPolicy sets a custom retry policy that determines retry behavior.
+func WithRetryPolicy(policy RetryPolicy) Option {
+	return func(c *Client) {
+		c.retryPolicy = policy
+	}
+}
+
+// WithRetryBudget enables retry budget tracking to prevent thundering herd.
+func WithRetryBudget(maxRetries int, perWindow time.Duration) Option {
+	return func(c *Client) {
+		c.retryBudget = NewRetryBudget(maxRetries, perWindow)
+	}
+}
+
 // WithCircuitBreaker configures a circuit breaker.
 func WithCircuitBreaker(config CircuitBreakerConfig) Option {
 	return func(c *Client) {
@@ -210,6 +224,8 @@ func (c *Client) ValidateConfiguration() error {
 	var errors []string
 
 	errors = append(errors, c.validateRetryConfig()...)
+	errors = append(errors, c.validateRetryPolicyConfig()...)
+	errors = append(errors, c.validateRetryBudgetConfig()...)
 	errors = append(errors, c.validateRateLimiterConfig()...)
 	errors = append(errors, c.validateCacheConfig()...)
 	errors = append(errors, c.validateCircuitBreakerConfig()...)
@@ -391,6 +407,36 @@ func (c *Client) validateExtremeValues() []string {
 
 	if c.cache != nil && c.cacheTTL > 24*time.Hour {
 		errors = append(errors, "cacheTTL > 24h may cause stale data issues")
+	}
+
+	return errors
+}
+
+func (c *Client) validateRetryPolicyConfig() []string {
+	var errors []string
+
+	// RetryPolicy is optional, no validation needed if nil
+	// If both retryPolicy and legacy retry fields are set, that's allowed (retryPolicy takes precedence)
+
+	return errors
+}
+
+func (c *Client) validateRetryBudgetConfig() []string {
+	var errors []string
+
+	if c.retryBudget != nil {
+		if c.retryBudget.maxRetries <= 0 {
+			errors = append(errors, "retryBudget maxRetries must be positive")
+		}
+		if c.retryBudget.perWindow <= 0 {
+			errors = append(errors, "retryBudget perWindow must be positive")
+		}
+		if c.retryBudget.maxRetries > 1000 {
+			errors = append(errors, "retryBudget maxRetries > 1000 may cause excessive resource usage")
+		}
+		if c.retryBudget.perWindow < time.Second {
+			errors = append(errors, "retryBudget perWindow < 1s may cause excessive retry limiting")
+		}
 	}
 
 	return errors

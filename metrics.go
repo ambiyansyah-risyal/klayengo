@@ -2,6 +2,7 @@ package klayengo
 
 import (
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -24,6 +25,8 @@ type MetricsCollector struct {
 	cacheSize   *prometheus.GaugeVec
 
 	deduplicationHits *prometheus.CounterVec
+
+	retryBudgetExceeded *prometheus.CounterVec
 
 	errorsTotal *prometheus.CounterVec
 
@@ -108,6 +111,13 @@ func NewMetricsCollectorWithRegistry(registry prometheus.Registerer) *MetricsCol
 				Help: "Total number of deduplication hits",
 			},
 			[]string{"method", "endpoint"},
+		),
+		retryBudgetExceeded: promauto.With(registry).NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "klayengo_retry_budget_exceeded_total",
+				Help: "Total number of times retry budget was exceeded",
+			},
+			[]string{"host"},
 		),
 		errorsTotal: promauto.With(registry).NewCounterVec(
 			prometheus.CounterOpts{
@@ -232,6 +242,21 @@ func (mc *MetricsCollector) RecordDeduplicationHit(method, endpoint string) {
 	}
 
 	mc.deduplicationHits.WithLabelValues(method, endpoint).Inc()
+}
+
+// RecordRetryBudgetExceeded increments retry budget exceeded counter.
+func (mc *MetricsCollector) RecordRetryBudgetExceeded(endpoint string) {
+	if mc == nil {
+		return
+	}
+
+	// Extract host from endpoint for the label
+	host := endpoint
+	if idx := strings.Index(endpoint, "/"); idx != -1 {
+		host = endpoint[:idx]
+	}
+
+	mc.retryBudgetExceeded.WithLabelValues(host).Inc()
 }
 
 // GetRegistry exposes the underlying prometheus registry.
