@@ -3,12 +3,14 @@
 // 2. Advanced client with custom retry conditions, middleware, and metrics
 // 3. New retry policy system with Retry-After header support and configurable backoff
 // 4. Retry budget functionality to prevent retry storms and resource exhaustion
+// 5. Configurable backoff strategies (exponential vs decorrelated jitter)
 //
-// This example showcases the features implemented in GitHub issue #10:
+// This example showcases the features implemented in GitHub issues #10 and #11:
 // - Retry-After header parsing and respect
 // - Global retry budget with time windows
 // - Idempotent method detection
 // - Enhanced retry policy interface
+// - Backoff strategies for smoother tail latencies
 package main
 
 import (
@@ -46,6 +48,26 @@ func main() {
 	}
 	_ = resp.Body.Close()
 	fmt.Println("basic GET status", resp.StatusCode)
+
+	// --- Backoff strategy example ---
+	// Decorrelated jitter provides smoother tail latencies and reduces thundering herd
+	decorrelatedClient := klayengo.New(
+		klayengo.WithBackoffStrategy(klayengo.DecorrelatedJitter),
+		klayengo.WithMaxRetries(3),
+		klayengo.WithInitialBackoff(100*time.Millisecond),
+		klayengo.WithMaxBackoff(5*time.Second),
+		klayengo.WithSimpleLogger(),
+	)
+	if !decorrelatedClient.IsValid() {
+		log.Fatalf("invalid decorrelated client config: %v", decorrelatedClient.ValidationError())
+	}
+
+	resp3, err := decorrelatedClient.Get(ctx, httpbinJSON)
+	if err != nil {
+		log.Fatalf("decorrelated jitter GET failed: %v", err)
+	}
+	_ = resp3.Body.Close()
+	fmt.Println("decorrelated jitter GET status", resp3.StatusCode)
 
 	// --- Advanced snippet: custom retry condition + middleware + metrics ---
 	advanced := klayengo.New(

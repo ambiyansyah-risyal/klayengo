@@ -7,6 +7,35 @@ import (
 	"time"
 )
 
+func TestWithLoggerAndRequestIDGenerator(t *testing.T) {
+	logger := NewSimpleLogger()
+	client := New(WithLogger(logger))
+	if client.logger == nil {
+		t.Error("Expected logger to be set by WithLogger")
+	}
+	customGen := func() string { return "custom-id" }
+	client = New(WithRequestIDGenerator(customGen))
+	if client.debug == nil || client.debug.RequestIDGen == nil {
+		t.Error("Expected RequestIDGen to be set by WithRequestIDGenerator")
+	}
+	if id := client.debug.RequestIDGen(); id != "custom-id" {
+		t.Errorf("Expected custom RequestIDGen to return 'custom-id', got '%s'", id)
+	}
+}
+
+func TestBackoffStrategyString(t *testing.T) {
+	if ExponentialJitter.String() != "ExponentialJitter" {
+		t.Errorf("Expected ExponentialJitter.String() to return 'ExponentialJitter'")
+	}
+	if DecorrelatedJitter.String() != "DecorrelatedJitter" {
+		t.Errorf("Expected DecorrelatedJitter.String() to return 'DecorrelatedJitter'")
+	}
+	unknown := BackoffStrategy(999)
+	if unknown.String() != "Unknown" {
+		t.Errorf("Expected unknown BackoffStrategy.String() to return 'Unknown'")
+	}
+}
+
 const (
 	typesTestURL         = "https://example.com"
 	testContentType      = "Content-Type"

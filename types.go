@@ -219,14 +219,37 @@ type RetryBudget struct {
 	windowStart int64
 }
 
-// DefaultRetryPolicy implements the standard retry policy with exponential backoff.
+// DefaultRetryPolicy implements the standard retry policy with configurable backoff strategy.
 type DefaultRetryPolicy struct {
 	maxRetries        int
 	initialBackoff    time.Duration
 	maxBackoff        time.Duration
 	backoffMultiplier float64
 	jitter            float64
+	backoffStrategy   BackoffStrategy
 	isIdempotent      func(method string) bool
+}
+
+// BackoffStrategy defines the algorithm used for calculating retry delays.
+type BackoffStrategy int
+
+const (
+	// ExponentialJitter applies exponential backoff with uniform jitter (current default).
+	ExponentialJitter BackoffStrategy = iota
+	// DecorrelatedJitter applies decorrelated jitter as per AWS paper for smoother tail latencies.
+	DecorrelatedJitter
+)
+
+// String returns the string representation of the BackoffStrategy.
+func (bs BackoffStrategy) String() string {
+	switch bs {
+	case ExponentialJitter:
+		return "ExponentialJitter"
+	case DecorrelatedJitter:
+		return "DecorrelatedJitter"
+	default:
+		return "Unknown"
+	}
 }
 
 // ErrRetryBudgetExceeded is returned when the retry budget is exhausted.
