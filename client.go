@@ -28,6 +28,8 @@ type Client struct {
 	circuitBreaker    *CircuitBreaker
 	middleware        []Middleware
 	rateLimiter       *RateLimiter
+	limiterRegistry   *RateLimiterRegistry
+	limiterKeyFunc    KeyFunc
 	cache             Cache
 	cacheTTL          time.Duration
 	cacheKeyFunc      func(*http.Request) string
@@ -61,6 +63,8 @@ func New(options ...Option) *Client {
 		circuitBreaker:    NewCircuitBreaker(CircuitBreakerConfig{}),
 		middleware:        []Middleware{},
 		rateLimiter:       nil,
+		limiterRegistry:   nil,
+		limiterKeyFunc:    nil,
 		cache:             nil,
 		cacheTTL:          5 * time.Minute,
 		cacheKeyFunc:      DefaultCacheKeyFunc,
@@ -233,18 +237,44 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 func (c *Client) doWithRetry(req *http.Request, attempt int, requestID string, startTime time.Time) (*http.Response, error) {
 	endpoint := getEndpointFromRequest(req)
 
-	if c.rateLimiter != nil && !c.rateLimiter.Allow() {
+	var allowed bool
+	var limiterKey string
+	if c.limiterRegistry != nil {
+		allowed, limiterKey = c.limiterRegistry.Allow(req)
+	} else if c.rateLimiter != nil {
+		allowed = c.rateLimiter.Allow()
+		limiterKey = "default"
+	} else {
+		allowed = true
+		limiterKey = "none"
+	}
+
+	if !allowed {
 		if c.debug != nil && c.debug.Enabled && c.debug.LogRateLimit && c.logger != nil {
-			c.logger.Warn("Rate limit exceeded", "requestID", requestID, "endpoint", endpoint)
+			c.logger.Warn("Rate limit exceeded", "requestID", requestID, "endpoint", endpoint, "limiterKey", limiterKey)
 		}
 
 		if c.metrics != nil {
 			c.metrics.RecordError("RateLimit", req.Method, endpoint)
+			c.metrics.RecordRateLimiterExceeded(limiterKey)
 		}
 		return nil, c.createClientError(ErrorTypeRateLimit, "rate limit exceeded", nil, requestID, req, attempt, time.Since(startTime))
 	}
 
-	if c.rateLimiter != nil && c.metrics != nil {
+	if c.limiterRegistry != nil && c.metrics != nil {
+		// Record metrics for all active limiters in the registry
+		c.limiterRegistry.mutex.RLock()
+		for key, limiter := range c.limiterRegistry.limiters {
+			if rl, ok := limiter.(*RateLimiter); ok {
+				c.metrics.RecordRateLimiterTokens(key, int(rl.tokens))
+			}
+		}
+		c.limiterRegistry.mutex.RUnlock()
+		// Also record fallback limiter if it exists
+		if c.rateLimiter != nil {
+			c.metrics.RecordRateLimiterTokens("default", int(c.rateLimiter.tokens))
+		}
+	} else if c.rateLimiter != nil && c.metrics != nil {
 		c.metrics.RecordRateLimiterTokens("default", int(c.rateLimiter.tokens))
 	}
 
