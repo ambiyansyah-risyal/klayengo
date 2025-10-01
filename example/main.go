@@ -11,6 +11,7 @@
 // - Idempotent method detection
 // - Enhanced retry policy interface
 // - Backoff strategies for smoother tail latencies
+// - Per-host and per-route rate limiting (issue #12)
 package main
 
 import (
@@ -142,5 +143,66 @@ func main() {
 	_, err2 := budgetClient.Get(ctx, "https://httpbin.org/status/500")
 	if err2 != nil {
 		fmt.Printf("Second request failed due to retry budget: %v\n", err2)
+	}
+
+	// --- Per-host and per-route rate limiting example ---
+	fmt.Println("\n--- Testing Per-Host Rate Limiting ---")
+
+	// Create different rate limiters for different hosts
+	apiLimiter := klayengo.NewRateLimiter(5, time.Second)   // 5 req/sec for API
+	webLimiter := klayengo.NewRateLimiter(20, time.Second)  // 20 req/sec for web
+
+	perHostClient := klayengo.New(
+		klayengo.WithLimiterKeyFunc(klayengo.DefaultHostKeyFunc),
+		klayengo.WithLimiterFor("host:httpbin.org", apiLimiter),
+		klayengo.WithLimiterFor("host:example.com", webLimiter),
+		klayengo.WithRateLimiter(2, time.Second), // Fallback limiter
+		klayengo.WithSimpleLogger(),
+	)
+
+	// Make several requests to the same host
+	for i := 0; i < 8; i++ {
+		resp, err := perHostClient.Get(ctx, httpbinJSON)
+		if err != nil {
+			fmt.Printf("Request %d failed: %v\n", i+1, err)
+		} else {
+			fmt.Printf("Request %d succeeded: %s\n", i+1, resp.Status)
+			_ = resp.Body.Close()
+		}
+		time.Sleep(50 * time.Millisecond) // Small delay between requests
+	}
+
+	fmt.Println("\n--- Testing Per-Route Rate Limiting ---")
+
+	// Create different rate limiters for different routes
+	jsonLimiter := klayengo.NewRateLimiter(3, time.Second) // 3 req/sec for /json
+	htmlLimiter := klayengo.NewRateLimiter(10, time.Second) // 10 req/sec for /html
+
+	perRouteClient := klayengo.New(
+		klayengo.WithLimiterKeyFunc(klayengo.DefaultRouteKeyFunc),
+		klayengo.WithLimiterFor("route:GET:/json", jsonLimiter),
+		klayengo.WithLimiterFor("route:GET:/html", htmlLimiter),
+		klayengo.WithSimpleLogger(),
+	)
+
+	// Test different routes
+	jsonURL := "https://httpbin.org/json"
+	htmlURL := "https://httpbin.org/html"
+
+	for i := 0; i < 6; i++ {
+		// Alternate between routes
+		url := jsonURL
+		if i%2 == 1 {
+			url = htmlURL
+		}
+
+		resp, err := perRouteClient.Get(ctx, url)
+		if err != nil {
+			fmt.Printf("Route request %d to %s failed: %v\n", i+1, url, err)
+		} else {
+			fmt.Printf("Route request %d to %s succeeded: %s\n", i+1, url, resp.Status)
+			_ = resp.Body.Close()
+		}
+		time.Sleep(100 * time.Millisecond)
 	}
 }

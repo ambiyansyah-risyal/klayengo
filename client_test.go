@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -565,4 +566,114 @@ func BenchmarkClientConcurrentDeduplication(b *testing.B) {
 			_ = resp.Body.Close()
 		}
 	})
+}
+
+func TestClientWithPerHostRateLimiting(t *testing.T) {
+	// Create a slow server to ensure rate limiting kicks in
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(10 * time.Millisecond) // Slow response
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	// Create client with per-host rate limiting
+	hostLimiter := NewRateLimiter(2, 100*time.Millisecond) // Only 2 requests per 100ms
+
+	client := New(
+		WithLimiterKeyFunc(DefaultHostKeyFunc),
+		WithLimiterFor("host:"+mustParseURL(server.URL).Host, hostLimiter),
+		WithMaxRetries(0), // Disable retries for this test
+	)
+
+	// Make multiple requests to the same host
+	var allowedCount, deniedCount int
+	for i := 0; i < 5; i++ {
+		_, err := client.Get(context.Background(), server.URL)
+		if err != nil {
+			if strings.Contains(err.Error(), "rate limit exceeded") {
+				deniedCount++
+			} else {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+		} else {
+			allowedCount++
+		}
+	}
+
+	// Should have some requests allowed and some denied due to rate limiting
+	if allowedCount == 0 {
+		t.Error("Expected at least some requests to be allowed")
+	}
+	if deniedCount == 0 {
+		t.Error("Expected at least some requests to be denied due to rate limiting")
+	}
+}
+
+func TestClientWithPerRouteRateLimiting(t *testing.T) {
+	// Create a slow server
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(10 * time.Millisecond)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	// Create client with per-route rate limiting
+	usersLimiter := NewRateLimiter(1, 500*time.Millisecond) // Only 1 request per 500ms to /users
+	postsLimiter := NewRateLimiter(5, 500*time.Millisecond) // 5 requests per 500ms to /posts
+
+	client := New(
+		WithLimiterKeyFunc(DefaultRouteKeyFunc),
+		WithLimiterFor("route:GET:/users", usersLimiter),
+		WithLimiterFor("route:GET:/posts", postsLimiter),
+		WithMaxRetries(0),
+	)
+
+	serverURL := mustParseURL(server.URL)
+
+	// Test /users endpoint (strict limiting)
+	var usersAllowed, usersDenied int
+	usersURL := serverURL.String() + "/users"
+	for i := 0; i < 4; i++ {
+		_, err := client.Get(context.Background(), usersURL)
+		if err != nil {
+			if strings.Contains(err.Error(), "rate limit exceeded") {
+				usersDenied++
+			} else {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+		} else {
+			usersAllowed++
+		}
+		time.Sleep(100 * time.Millisecond) // Wait a bit between requests
+	}
+
+	// Test /posts endpoint (more permissive limiting)
+	var postsAllowed, postsDenied int
+	postsURL := serverURL.String() + "/posts"
+	for i := 0; i < 8; i++ {
+		_, err := client.Get(context.Background(), postsURL)
+		if err != nil {
+			if strings.Contains(err.Error(), "rate limit exceeded") {
+				postsDenied++
+			} else {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+		} else {
+			postsAllowed++
+		}
+		time.Sleep(50 * time.Millisecond) // Wait a bit between requests
+	}
+
+	// /users should have stricter limiting (more denials)
+	if usersDenied <= postsDenied {
+		t.Errorf("Expected /users to have more denials (%d) than /posts (%d)", usersDenied, postsDenied)
+	}
+}
+
+func mustParseURL(rawurl string) *url.URL {
+u, err := url.Parse(rawurl)
+if err != nil {
+panic(err)
+}
+return u
 }

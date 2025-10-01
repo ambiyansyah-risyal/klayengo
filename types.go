@@ -3,6 +3,7 @@ package klayengo
 import (
 	"fmt"
 	"net/http"
+	"sync"
 	"time"
 )
 
@@ -112,12 +113,28 @@ const (
 	ErrorTypeRetryBudgetExceeded = "RetryBudgetExceededError"
 )
 
+// Limiter interface abstracts rate limiting behavior.
+type Limiter interface {
+	Allow() bool
+}
+
+// KeyFunc generates a rate limiter key from a request.
+type KeyFunc func(*http.Request) string
+
 // RateLimiter is a token bucket implementation.
 type RateLimiter struct {
 	tokens     int64
 	maxTokens  int64
 	refillRate time.Duration
 	lastRefill int64
+}
+
+// RateLimiterRegistry manages per-key rate limiters with concurrent access safety.
+type RateLimiterRegistry struct {
+	limiters map[string]Limiter
+	keyFunc  KeyFunc
+	fallback Limiter
+	mutex    sync.RWMutex
 }
 
 // Option configures a Client instance.

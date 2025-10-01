@@ -32,7 +32,7 @@ import (
     "context"
     "log"
     "time"
-    
+
     "github.com/ambiyansyah-risyal/klayengo"
 )
 
@@ -68,25 +68,61 @@ client := klayengo.New(
     klayengo.WithMaxBackoff(10*time.Second),
     klayengo.WithBackoffMultiplier(2.0),
     klayengo.WithJitter(0.1),
-    
+
     // Rate limiting (10 requests per second)
     klayengo.WithRateLimiter(10, time.Second),
-    
+
     // Response caching
     klayengo.WithCache(5*time.Minute),
-    
+
     // Circuit breaker
     klayengo.WithCircuitBreaker(klayengo.CircuitBreakerConfig{
         FailureThreshold: 5,
         RecoveryTimeout:  30 * time.Second,
         SuccessThreshold: 3,
     }),
-    
+
     // Request deduplication
     klayengo.WithDeduplication(),
-    
+
     // Timeout
     klayengo.WithTimeout(30*time.Second),
+)
+```
+
+### Advanced Rate Limiting
+
+klayengo supports per-host and per-route rate limiting to prevent one hot endpoint from starving others:
+
+```go
+// Per-host rate limiting
+apiLimiter := klayengo.NewRateLimiter(50, time.Minute)  // 50 req/min for API
+webLimiter := klayengo.NewRateLimiter(200, time.Minute) // 200 req/min for web
+
+client := klayengo.New(
+    klayengo.WithLimiterKeyFunc(klayengo.DefaultHostKeyFunc),
+    klayengo.WithLimiterFor("host:api.example.com", apiLimiter),
+    klayengo.WithLimiterFor("host:web.example.com", webLimiter),
+    klayengo.WithRateLimiter(10, time.Second), // Fallback limiter
+)
+
+// Per-route rate limiting
+usersLimiter := klayengo.NewRateLimiter(100, time.Minute) // 100 req/min for /users
+postsLimiter := klayengo.NewRateLimiter(500, time.Minute) // 500 req/min for /posts
+
+client := klayengo.New(
+    klayengo.WithLimiterKeyFunc(klayengo.DefaultRouteKeyFunc),
+    klayengo.WithLimiterFor("route:GET:/users", usersLimiter),
+    klayengo.WithLimiterFor("route:GET:/posts", postsLimiter),
+)
+
+// Custom key function
+client := klayengo.New(
+    klayengo.WithLimiterKeyFunc(func(req *http.Request) string {
+        return fmt.Sprintf("service:%s", req.Header.Get("X-Service"))
+    }),
+    klayengo.WithLimiterFor("service:auth", klayengo.NewRateLimiter(1000, time.Minute)),
+    klayengo.WithLimiterFor("service:api", klayengo.NewRateLimiter(5000, time.Minute)),
 )
 ```
 
@@ -115,7 +151,7 @@ client := klayengo.New(
 // With custom retry policy - backoff strategy applies within the policy
 customPolicy := klayengo.NewDefaultRetryPolicyWithStrategy(
     5,                                    // maxRetries
-    100*time.Millisecond,                // initialBackoff  
+    100*time.Millisecond,                // initialBackoff
     30*time.Second,                      // maxBackoff
     2.0,                                 // multiplier
     0.1,                                 // jitter
@@ -165,20 +201,20 @@ client := klayengo.New(
     klayengo.WithMaxRetries(3),
     klayengo.WithInitialBackoff(100*time.Millisecond),
     klayengo.WithMaxBackoff(30*time.Second),
-    
+
     // Rate limiting based on API limits
     klayengo.WithRateLimiter(100, time.Minute),
-    
+
     // Longer cache for production
     klayengo.WithCache(15*time.Minute),
-    
+
     // Circuit breaker tuned for stability
     klayengo.WithCircuitBreaker(klayengo.CircuitBreakerConfig{
         FailureThreshold: 10,
         RecoveryTimeout:  60 * time.Second,
         SuccessThreshold: 5,
     }),
-    
+
     // Enable all features
     klayengo.WithDeduplication(),
     klayengo.WithMetricsCollector(metricsCollector),
@@ -200,10 +236,10 @@ client := klayengo.New(
             return true // Always retry network errors
         }
         // Retry on 5xx, 429 (rate limited), and specific gateway errors
-        return resp.StatusCode >= 500 || 
+        return resp.StatusCode >= 500 ||
                resp.StatusCode == 429 ||
-               resp.StatusCode == 502 || 
-               resp.StatusCode == 503 || 
+               resp.StatusCode == 502 ||
+               resp.StatusCode == 503 ||
                resp.StatusCode == 504
     }),
     klayengo.WithMaxRetries(5),
@@ -261,7 +297,7 @@ Response ← Middleware ← Rate Limiter ← Circuit Breaker ← Cache ← Retry
 When metrics are enabled, klayengo exposes the following Prometheus metrics:
 
 - `klayengo_requests_total` - Total HTTP requests
-- `klayengo_request_duration_seconds` - Request duration histogram  
+- `klayengo_request_duration_seconds` - Request duration histogram
 - `klayengo_requests_in_flight` - Current in-flight requests
 - `klayengo_retries_total` - Total retry attempts
 - `klayengo_circuit_breaker_state` - Circuit breaker state (0=closed, 1=open, 2=half-open)
@@ -326,7 +362,9 @@ go run main.go
 | `WithJitter(f)` | Jitter factor (0-1) | 0.1 |
 | `WithBackoffStrategy(s)` | Backoff algorithm (ExponentialJitter/DecorrelatedJitter) | ExponentialJitter |
 | `WithTimeout(d)` | Request timeout | 30s |
-| `WithRateLimiter(tokens, interval)` | Rate limiting | None |
+| `WithRateLimiter(tokens, interval)` | Global rate limiting | None |
+| `WithLimiterKeyFunc(fn)` | Key function for per-key limiting | None |
+| `WithLimiterFor(key, limiter)` | Rate limiter for specific key | None |
 | `WithCache(ttl)` | Response caching | None |
 | `WithCircuitBreaker(config)` | Circuit breaker | Disabled |
 | `WithRetryPolicy(policy)` | Custom retry policy (overrides legacy knobs) | None |

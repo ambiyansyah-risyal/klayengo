@@ -61,6 +61,27 @@ func WithRateLimiter(maxTokens int, refillRate time.Duration) Option {
 	}
 }
 
+// WithLimiterFor registers a rate limiter for a specific key.
+func WithLimiterFor(key string, limiter Limiter) Option {
+	return func(c *Client) {
+		if c.limiterRegistry == nil {
+			c.limiterRegistry = NewRateLimiterRegistry(c.limiterKeyFunc, c.rateLimiter)
+		}
+		c.limiterRegistry.RegisterLimiter(key, limiter)
+	}
+}
+
+// WithLimiterKeyFunc sets the function used to generate rate limiter keys from requests.
+func WithLimiterKeyFunc(keyFunc KeyFunc) Option {
+	return func(c *Client) {
+		c.limiterKeyFunc = keyFunc
+		if c.limiterRegistry != nil {
+			// Update existing registry with new key function
+			c.limiterRegistry = NewRateLimiterRegistry(keyFunc, c.rateLimiter)
+		}
+	}
+}
+
 // WithCache enables the default in-memory cache with a global TTL.
 func WithCache(ttl time.Duration) Option {
 	return func(c *Client) {
@@ -294,6 +315,12 @@ func (c *Client) validateRateLimiterConfig() []string {
 		}
 		if c.rateLimiter.refillRate <= 0 {
 			errors = append(errors, "rateLimiter refillRate must be positive")
+		}
+	}
+
+	if c.limiterRegistry != nil {
+		if c.limiterKeyFunc == nil {
+			errors = append(errors, "limiterKeyFunc must be set when limiterRegistry is enabled")
 		}
 	}
 

@@ -22,6 +22,8 @@ type MetricsCollector struct {
 
 	rateLimiterTokens *prometheus.GaugeVec
 
+	rateLimiterExceeded *prometheus.CounterVec
+
 	cacheHits   *prometheus.CounterVec
 	cacheMisses *prometheus.CounterVec
 	cacheSize   *prometheus.GaugeVec
@@ -85,6 +87,13 @@ func NewMetricsCollectorWithRegistry(registry prometheus.Registerer) *MetricsCol
 				Help: "Current number of available rate limiter tokens",
 			},
 			[]string{"name"},
+		),
+		rateLimiterExceeded: promauto.With(registry).NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "klayengo_rate_limited_total",
+				Help: "Total number of times rate limiting was enforced",
+			},
+			[]string{"key"},
 		),
 		cacheHits: promauto.With(registry).NewCounterVec(
 			prometheus.CounterOpts{
@@ -199,6 +208,15 @@ func (mc *MetricsCollector) RecordRateLimiterTokens(name string, tokens int) {
 	}
 
 	mc.rateLimiterTokens.WithLabelValues(name).Set(float64(tokens))
+}
+
+// RecordRateLimiterExceeded increments rate limiter exceeded counter.
+func (mc *MetricsCollector) RecordRateLimiterExceeded(key string) {
+	if mc == nil {
+		return
+	}
+
+	mc.rateLimiterExceeded.WithLabelValues(key).Inc()
 }
 
 // RecordCacheHit increments cache hit counter.

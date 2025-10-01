@@ -1,0 +1,47 @@
+#!/bin/bash
+
+# Commit message validation hook
+# Validates that:
+# 1. Message has a prefix (type)
+# 2. Message is one line
+# 3. Message doesn't contain AI keywords
+
+COMMIT_MSG_FILE=$1
+COMMIT_MSG=$(cat "$COMMIT_MSG_FILE")
+
+# Check if message is empty
+if [ -z "$COMMIT_MSG" ]; then
+    echo "❌ Empty commit message. Please provide a descriptive message."
+    exit 1
+fi
+
+# Check if the message is more than one line (excluding comments)
+FIRST_LINE=$(echo "$COMMIT_MSG" | head -n 1)
+if [ -n "$(echo "$COMMIT_MSG" | tail -n +2 | grep -v '^#' | grep -v '^$')" ]; then
+    echo "❌ Commit message should be a single line (excluding comments)."
+    echo "Current message:"
+    echo "$COMMIT_MSG"
+    exit 1
+fi
+
+# Check for conventional commit prefix (type: message)
+PREFIX_PATTERN="^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test|wip)(\(.+\))?: .+"
+
+if ! echo "$FIRST_LINE" | grep -qE "$PREFIX_PATTERN"; then
+    echo "❌ Commit message must follow conventional commits format: <type>(optional scope): <description>"
+    echo "Examples: feat: add new feature, fix: resolve issue, docs: update readme"
+    echo "Current message: $FIRST_LINE"
+    exit 1
+fi
+
+# Check for AI keywords (case-insensitive)
+AI_KEYWORDS="codex|copilot|claude|qwen|ai|artificial intelligence|machine learning|ml|chatgpt|gpt|openai|anthropic"
+
+if echo "$FIRST_LINE" | grep -qiE "$AI_KEYWORDS"; then
+    echo "❌ Commit message contains AI-related keywords which are not allowed: $AI_KEYWORDS"
+    echo "Current message: $FIRST_LINE"
+    exit 1
+fi
+
+echo "✅ Commit message is valid: $FIRST_LINE"
+exit 0
