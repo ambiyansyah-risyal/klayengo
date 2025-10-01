@@ -1,0 +1,15 @@
+#!/bin/bash
+
+# Pre-commit hook to run act (GitHub Actions locally)
+echo "Running GitHub Actions locally with act..."
+
+# Run act to ensure tests and checks pass
+act
+
+if [ $? -ne 0 ]; then
+    echo "❌ GitHub Actions failed. Commit aborted."
+    exit 1
+fi
+
+echo "✅ GitHub Actions passed. Proceeding with commit..."
+exit 0
