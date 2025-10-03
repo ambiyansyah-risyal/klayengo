@@ -112,6 +112,20 @@ func WithCacheCondition(fn CacheCondition) Option {
 	}
 }
 
+// WithCacheProvider sets a new cache provider supporting HTTP semantics.
+func WithCacheProvider(provider CacheProvider) Option {
+	return func(c *Client) {
+		c.cacheProvider = provider
+	}
+}
+
+// WithCacheMode sets the cache behavior mode.
+func WithCacheMode(mode CacheMode) Option {
+	return func(c *Client) {
+		c.cacheMode = mode
+	}
+}
+
 // WithTimeout sets per-request timeout (sets underlying http.Client timeout).
 func WithTimeout(d time.Duration) Option {
 	return func(c *Client) {
