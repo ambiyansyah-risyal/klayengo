@@ -81,7 +81,7 @@ func TestClientConditionalRequests(t *testing.T) {
 
 		// Check for conditional headers
 		ifNoneMatch := r.Header.Get("If-None-Match")
-		
+
 		currentETag := etag
 		if changeResponse {
 			currentETag = newETag
@@ -95,7 +95,7 @@ func TestClientConditionalRequests(t *testing.T) {
 		w.Header().Set("ETag", currentETag)
 		w.Header().Set("Cache-Control", "max-age=1") // Short TTL to force revalidation
 		w.WriteHeader(http.StatusOK)
-		
+
 		if changeResponse {
 			w.Write([]byte("new response body"))
 		} else {
@@ -226,12 +226,12 @@ func TestClientSWRMode(t *testing.T) {
 
 func TestClientSingleFlight(t *testing.T) {
 	callCount := int32(0)
-	
+
 	// Slow server to ensure concurrent requests
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		atomic.AddInt32(&callCount, 1)
 		time.Sleep(100 * time.Millisecond) // Simulate slow response
-		
+
 		w.Header().Set("Cache-Control", "max-age=3600")
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("response"))
@@ -459,7 +459,7 @@ func TestClientCacheModesWithOptions(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			client := New(tt.opts...)
-			
+
 			// Verify client was created successfully
 			if client == nil {
 				t.Fatal("Client creation failed")

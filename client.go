@@ -170,14 +170,14 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 
 	if cacheEnabled {
 		cacheKey := c.cacheKeyFunc(req)
-		
+
 		// Try new cache provider first if available
 		if c.cacheProvider != nil && (c.cacheMode == HTTPSemantics || c.cacheMode == SWR) {
 			if resp, found := c.cacheProvider.Get(req.Context(), cacheKey); found {
 				if c.debug != nil && c.debug.Enabled && c.debug.LogCache && c.logger != nil {
 					c.logger.Debug("Cache provider hit", "requestID", requestID, "cacheKey", cacheKey, "mode", c.cacheMode)
 				}
-				
+
 				if c.metrics != nil {
 					c.metrics.RecordCacheHit(req.Method, endpoint)
 				}
@@ -197,7 +197,7 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 				if c.cacheMode == HTTPSemantics {
 					return c.handleHTTPSemanticsCacheHit(req, entry, cacheKey)
 				}
-				
+
 				if c.debug != nil && c.debug.Enabled && c.debug.LogCache && c.logger != nil {
 					c.logger.Debug("Cache hit", "requestID", requestID, "cacheKey", cacheKey)
 				}
@@ -215,7 +215,7 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 				return c.createResponseFromCache(entry), nil
 			}
 		}
-		
+
 		if c.metrics != nil {
 			c.metrics.RecordCacheMiss(req.Method, endpoint)
 		}
@@ -228,12 +228,26 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	// Use single-flight protection for cache misses to prevent stampedes
 	var resp *http.Response
 	var err error
-	
+	var skipCaching bool
+
 	if cacheEnabled && (c.cacheMode == HTTPSemantics || c.cacheMode == SWR) {
 		cacheKey := c.cacheKeyFunc(req)
 		resp, err = c.singleFlightDo(cacheKey, func() (*http.Response, error) {
-			return c.doWithRetry(req, 0, requestID, start)
+			httpResp, httpErr := c.doWithRetry(req, 0, requestID, start)
+
+			// Cache the response here in the single-flight function to avoid races
+			if httpErr == nil && httpResp.StatusCode < 400 && c.cacheProvider != nil {
+				ttl := c.getCacheTTLForRequest(req)
+				c.cacheProvider.Set(req.Context(), cacheKey, httpResp, ttl)
+
+				if c.debug != nil && c.debug.Enabled && c.debug.LogCache && c.logger != nil {
+					c.logger.Debug("Response cached via provider", "requestID", requestID, "cacheKey", cacheKey, "mode", c.cacheMode)
+				}
+			}
+
+			return httpResp, httpErr
 		})
+		skipCaching = true // Skip caching below since we already did it in single-flight
 	} else {
 		resp, err = c.doWithRetry(req, 0, requestID, start)
 	}
@@ -251,14 +265,14 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 		c.metrics.RecordRequest(req.Method, endpoint, statusCode, duration)
 	}
 
-	if cacheEnabled && err == nil && resp.StatusCode < 400 {
+	if cacheEnabled && err == nil && resp.StatusCode < 400 && !skipCaching {
 		cacheKey := c.cacheKeyFunc(req)
-		
+
 		// Use new cache provider if available
 		if c.cacheProvider != nil {
 			ttl := c.getCacheTTLForRequest(req)
 			c.cacheProvider.Set(req.Context(), cacheKey, resp, ttl)
-			
+
 			if c.debug != nil && c.debug.Enabled && c.debug.LogCache && c.logger != nil {
 				c.logger.Debug("Response cached via provider", "requestID", requestID, "cacheKey", cacheKey, "mode", c.cacheMode)
 			}
@@ -631,7 +645,7 @@ func (c *Client) singleFlightDo(key string, fn func() (*http.Response, error)) (
 
 	// Execute the function
 	resp, err := fn()
-	
+
 	// Complete the entry
 	entry.resp = resp
 	entry.err = err
@@ -662,7 +676,7 @@ func (c *Client) performConditionalRequest(req *http.Request, entry *CacheEntry)
 // handleHTTPSemanticsCacheHit handles cache hits with HTTP semantics.
 func (c *Client) handleHTTPSemanticsCacheHit(req *http.Request, entry *CacheEntry, cacheKey string) (*http.Response, error) {
 	cacheControl := parseCacheControl(entry.Header.Get("Cache-Control"))
-	
+
 	// Check if revalidation is needed
 	if shouldRevalidate(entry, cacheControl) {
 		// In SWR mode, serve stale immediately and revalidate in background
@@ -678,30 +692,30 @@ func (c *Client) handleHTTPSemanticsCacheHit(req *http.Request, entry *CacheEntr
 					return resp, err
 				})
 			}()
-			
+
 			// Serve stale response immediately
 			return c.createResponseFromCache(entry), nil
 		}
-		
+
 		// Perform conditional request
 		resp, err := c.performConditionalRequest(req, entry)
 		if err != nil {
 			return nil, err
 		}
-		
+
 		// If not modified, serve cached version
 		if isNotModified(resp) {
 			return c.createResponseFromCache(entry), nil
 		}
-		
+
 		// Cache the new response
 		if c.cacheProvider != nil {
 			c.cacheProvider.Set(req.Context(), cacheKey, resp, 0)
 		}
-		
+
 		return resp, nil
 	}
-	
+
 	// Entry is fresh, serve from cache
 	return c.createResponseFromCache(entry), nil
 }

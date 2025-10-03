@@ -41,14 +41,20 @@ func (cp *DefaultCacheProvider) Get(ctx context.Context, key string) (*http.Resp
 
 // Set stores a response in the cache.
 func (cp *DefaultCacheProvider) Set(ctx context.Context, key string, resp *http.Response, ttl time.Duration) {
-	// Read response body
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return
+	// Read response body only if it hasn't been read already
+	var body []byte
+	var err error
+
+	if resp.Body != nil {
+		body, err = io.ReadAll(resp.Body)
+		if err != nil {
+			return
+		}
+		resp.Body.Close()
+
+		// Create a new body for downstream consumption
+		resp.Body = io.NopCloser(bytes.NewReader(body))
 	}
-	
-	// Restore body for downstream
-	resp.Body = io.NopCloser(bytes.NewReader(body))
 
 	// Create cache entry
 	entry := &CacheEntry{
@@ -103,7 +109,7 @@ func (cp *HTTPSemanticsCacheProvider) Get(ctx context.Context, key string) (*htt
 			entry.IsStale = true
 			return cp.createResponseFromEntry(entry), true
 		}
-		
+
 		// Entry is expired and not servable
 		cp.cache.Delete(key)
 		return nil, false
@@ -115,14 +121,20 @@ func (cp *HTTPSemanticsCacheProvider) Get(ctx context.Context, key string) (*htt
 
 // Set stores a response with HTTP cache semantics.
 func (cp *HTTPSemanticsCacheProvider) Set(ctx context.Context, key string, resp *http.Response, ttl time.Duration) {
-	// Read response body
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return
+	// Read response body only if it hasn't been read already
+	var body []byte
+	var err error
+
+	if resp.Body != nil {
+		body, err = io.ReadAll(resp.Body)
+		if err != nil {
+			return
+		}
+		resp.Body.Close()
+
+		// Create a new body for downstream consumption
+		resp.Body = io.NopCloser(bytes.NewReader(body))
 	}
-	
-	// Restore body for downstream
-	resp.Body = io.NopCloser(bytes.NewReader(body))
 
 	// Create enhanced cache entry with HTTP metadata
 	entry := createEnhancedCacheEntry(resp, body, time.Now())

@@ -94,10 +94,10 @@ func TestHTTPSemanticsCacheProvider(t *testing.T) {
 	testResp := &http.Response{
 		StatusCode: 200,
 		Header: http.Header{
-			"Content-Type":   []string{"application/json"},
-			"ETag":           []string{"\"123456\""},
-			"Last-Modified":  []string{time.Now().Add(-1 * time.Hour).Format(time.RFC1123)},
-			"Cache-Control":  []string{"max-age=3600"},
+			"Content-Type":  []string{"application/json"},
+			"ETag":          []string{"\"123456\""},
+			"Last-Modified": []string{time.Now().Add(-1 * time.Hour).Format(time.RFC1123)},
+			"Cache-Control": []string{"max-age=3600"},
 		},
 		Body: io.NopCloser(bytes.NewReader(testBody)),
 	}
@@ -137,14 +137,14 @@ func TestHTTPSemanticsCacheProviderSWR(t *testing.T) {
 
 	// Create a test response with SWR headers
 	testBody := []byte("test response body")
-	
+
 	// Create a response that will be stale in a moment
 	testResp := &http.Response{
 		StatusCode: 200,
 		Header: http.Header{
-			"Content-Type":   []string{"application/json"},
-			"ETag":           []string{"\"123456\""},
-			"Cache-Control":  []string{"max-age=1, stale-while-revalidate=300"},
+			"Content-Type":  []string{"application/json"},
+			"ETag":          []string{"\"123456\""},
+			"Cache-Control": []string{"max-age=1, stale-while-revalidate=300"},
 		},
 		Body: io.NopCloser(bytes.NewReader(testBody)),
 	}

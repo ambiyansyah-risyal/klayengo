@@ -13,7 +13,7 @@ import (
 // BenchmarkCacheModes compares performance between different cache modes
 func BenchmarkCacheModes(b *testing.B) {
 	callCount := int64(0)
-	
+
 	// Server with cache-friendly headers
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		atomic.AddInt64(&callCount, 1)
@@ -37,7 +37,7 @@ func BenchmarkCacheModes(b *testing.B) {
 			}
 			resp.Body.Close()
 		}
-		
+
 		finalCount := atomic.LoadInt64(&callCount)
 		b.Logf("Server calls: %d/%d (%.2f%% cache hit rate)", finalCount, b.N, float64(b.N-int(finalCount))/float64(b.N)*100)
 	})
@@ -60,7 +60,7 @@ func BenchmarkCacheModes(b *testing.B) {
 			}
 			resp.Body.Close()
 		}
-		
+
 		finalCount := atomic.LoadInt64(&callCount)
 		b.Logf("Server calls: %d/%d (%.2f%% cache hit rate)", finalCount, b.N, float64(b.N-int(finalCount))/float64(b.N)*100)
 	})
@@ -83,7 +83,7 @@ func BenchmarkCacheModes(b *testing.B) {
 			}
 			resp.Body.Close()
 		}
-		
+
 		finalCount := atomic.LoadInt64(&callCount)
 		b.Logf("Server calls: %d/%d (%.2f%% cache hit rate)", finalCount, b.N, float64(b.N-int(finalCount))/float64(b.N)*100)
 	})
@@ -92,7 +92,7 @@ func BenchmarkCacheModes(b *testing.B) {
 // BenchmarkSingleFlight demonstrates stampede protection
 func BenchmarkSingleFlight(b *testing.B) {
 	callCount := int64(0)
-	
+
 	// Slow server to ensure concurrent requests
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		atomic.AddInt64(&callCount, 1)
@@ -117,7 +117,7 @@ func BenchmarkSingleFlight(b *testing.B) {
 				resp.Body.Close()
 			}
 		})
-		
+
 		finalCount := atomic.LoadInt64(&callCount)
 		b.Logf("Server calls: %d/%d", finalCount, b.N)
 	})
@@ -141,7 +141,7 @@ func BenchmarkSingleFlight(b *testing.B) {
 				resp.Body.Close()
 			}
 		})
-		
+
 		finalCount := atomic.LoadInt64(&callCount)
 		b.Logf("Server calls: %d/%d (%.2f%% reduction)", finalCount, b.N, (1-float64(finalCount)/float64(b.N))*100)
 	})
@@ -150,16 +150,16 @@ func BenchmarkSingleFlight(b *testing.B) {
 // BenchmarkConditionalRequests measures overhead of conditional requests
 func BenchmarkConditionalRequests(b *testing.B) {
 	callCount := int64(0)
-	
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		count := atomic.AddInt64(&callCount, 1)
-		
+
 		etag := "\"benchmark-etag\""
 		if r.Header.Get("If-None-Match") == etag {
 			w.WriteHeader(http.StatusNotModified)
 			return
 		}
-		
+
 		w.Header().Set("ETag", etag)
 		w.Header().Set("Cache-Control", "max-age=1") // Short TTL to force revalidation
 		w.WriteHeader(http.StatusOK)
@@ -173,16 +173,16 @@ func BenchmarkConditionalRequests(b *testing.B) {
 		WithCacheProvider(provider),
 		WithCacheMode(HTTPSemantics),
 	)
-	
+
 	ctx := context.Background()
-	
+
 	// Prime the cache
 	resp, err := client.Get(ctx, server.URL)
 	if err != nil {
 		b.Fatal(err)
 	}
 	resp.Body.Close()
-	
+
 	// Wait for entry to become stale to trigger conditional requests
 	time.Sleep(2 * time.Second)
 	atomic.StoreInt64(&callCount, 0)
@@ -195,7 +195,7 @@ func BenchmarkConditionalRequests(b *testing.B) {
 		}
 		resp.Body.Close()
 	}
-	
+
 	finalCount := atomic.LoadInt64(&callCount)
 	b.Logf("Server calls: %d/%d (conditional requests)", finalCount, b.N)
 }

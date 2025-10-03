@@ -13,8 +13,8 @@ func TestParseCacheControl(t *testing.T) {
 		expected *CacheDirectives
 	}{
 		{
-			name:   "empty header",
-			header: "",
+			name:     "empty header",
+			header:   "",
 			expected: &CacheDirectives{},
 		},
 		{
@@ -255,7 +255,7 @@ func TestCalculateCacheExpiry(t *testing.T) {
 
 func TestShouldRevalidate(t *testing.T) {
 	now := time.Now()
-	
+
 	tests := []struct {
 		name              string
 		entry             *CacheEntry
