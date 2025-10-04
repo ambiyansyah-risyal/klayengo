@@ -283,7 +283,7 @@ func (c *Client) ValidateConfiguration() error {
 		return &ClientError{
 			Type:    ErrorTypeValidation,
 			Message: "configuration validation failed",
-			Cause:   fmt.Errorf("validation errors: %v", errors),
+			Cause:   fmt.Errorf("configuration validation failed: %v", errors),
 		}
 	}
 
