@@ -20,7 +20,7 @@ func BenchmarkCacheModes(b *testing.B) {
 		w.Header().Set("ETag", "\"benchmark-etag\"")
 		w.Header().Set("Cache-Control", "max-age=3600")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("benchmark response"))
+		_, _ = w.Write([]byte("benchmark response"))
 	}))
 	defer server.Close()
 
@@ -35,7 +35,7 @@ func BenchmarkCacheModes(b *testing.B) {
 			if err != nil {
 				b.Fatal(err)
 			}
-			resp.Body.Close()
+			_ = resp.Body.Close()
 		}
 
 		finalCount := atomic.LoadInt64(&callCount)
@@ -58,7 +58,7 @@ func BenchmarkCacheModes(b *testing.B) {
 			if err != nil {
 				b.Fatal(err)
 			}
-			resp.Body.Close()
+			_ = resp.Body.Close()
 		}
 
 		finalCount := atomic.LoadInt64(&callCount)
@@ -81,7 +81,7 @@ func BenchmarkCacheModes(b *testing.B) {
 			if err != nil {
 				b.Fatal(err)
 			}
-			resp.Body.Close()
+			_ = resp.Body.Close()
 		}
 
 		finalCount := atomic.LoadInt64(&callCount)
@@ -99,7 +99,7 @@ func BenchmarkSingleFlight(b *testing.B) {
 		time.Sleep(10 * time.Millisecond) // Simulate slow response
 		w.Header().Set("Cache-Control", "max-age=3600")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("response"))
+		_, _ = w.Write([]byte("response"))
 	}))
 	defer server.Close()
 
@@ -114,7 +114,7 @@ func BenchmarkSingleFlight(b *testing.B) {
 				if err != nil {
 					b.Fatal(err)
 				}
-				resp.Body.Close()
+				_ = resp.Body.Close()
 			}
 		})
 
@@ -138,7 +138,7 @@ func BenchmarkSingleFlight(b *testing.B) {
 				if err != nil {
 					b.Fatal(err)
 				}
-				resp.Body.Close()
+				_ = resp.Body.Close()
 			}
 		})
 
@@ -163,7 +163,7 @@ func BenchmarkConditionalRequests(b *testing.B) {
 		w.Header().Set("ETag", etag)
 		w.Header().Set("Cache-Control", "max-age=1") // Short TTL to force revalidation
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(fmt.Sprintf("response %d", count)))
+		_, _ = fmt.Fprintf(w, "response %d", count)
 	}))
 	defer server.Close()
 
@@ -181,7 +181,7 @@ func BenchmarkConditionalRequests(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 
 	// Wait for entry to become stale to trigger conditional requests
 	time.Sleep(2 * time.Second)
@@ -193,7 +193,7 @@ func BenchmarkConditionalRequests(b *testing.B) {
 		if err != nil {
 			b.Fatal(err)
 		}
-		resp.Body.Close()
+		_ = resp.Body.Close()
 	}
 
 	finalCount := atomic.LoadInt64(&callCount)

@@ -683,7 +683,7 @@ func (c *Client) handleHTTPSemanticsCacheHit(req *http.Request, entry *CacheEntr
 		if c.cacheMode == SWR && entry.IsStale {
 			// Start background revalidation
 			go func() {
-				c.singleFlightDo("revalidate:"+cacheKey, func() (*http.Response, error) {
+				_, _ = c.singleFlightDo("revalidate:"+cacheKey, func() (*http.Response, error) {
 					resp, err := c.performConditionalRequest(req, entry)
 					if err == nil && c.cacheProvider != nil {
 						// Update cache with fresh response

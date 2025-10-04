@@ -27,7 +27,7 @@ func TestClientHTTPSemantics(t *testing.T) {
 		w.Header().Set("ETag", etag)
 		w.Header().Set("Cache-Control", "max-age=3600")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("response body"))
+		_, _ = w.Write([]byte("response body"))
 	}))
 	defer server.Close()
 
@@ -47,7 +47,7 @@ func TestClientHTTPSemantics(t *testing.T) {
 	if err != nil {
 		t.Fatalf("First request failed: %v", err)
 	}
-	resp1.Body.Close()
+	_ = resp1.Body.Close()
 
 	if atomic.LoadInt32(&callCount) != 1 {
 		t.Errorf("Expected 1 server call after first request, got %d", callCount)
@@ -58,7 +58,7 @@ func TestClientHTTPSemantics(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Second request failed: %v", err)
 	}
-	resp2.Body.Close()
+	_ = resp2.Body.Close()
 
 	if atomic.LoadInt32(&callCount) != 1 {
 		t.Errorf("Expected 1 server call after second request (cache hit), got %d", callCount)
@@ -97,9 +97,9 @@ func TestClientConditionalRequests(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 
 		if changeResponse {
-			w.Write([]byte("new response body"))
+			_, _ = w.Write([]byte("new response body"))
 		} else {
-			w.Write([]byte(fmt.Sprintf("response body %d", count)))
+			_, _ = fmt.Fprintf(w, "response body %d", count)
 		}
 	}))
 	defer server.Close()
@@ -119,7 +119,7 @@ func TestClientConditionalRequests(t *testing.T) {
 	if err != nil {
 		t.Fatalf("First request failed: %v", err)
 	}
-	resp1.Body.Close()
+	_ = resp1.Body.Close()
 
 	if atomic.LoadInt32(&callCount) != 1 {
 		t.Errorf("Expected 1 server call after first request, got %d", callCount)
@@ -133,7 +133,7 @@ func TestClientConditionalRequests(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Second request failed: %v", err)
 	}
-	resp2.Body.Close()
+	_ = resp2.Body.Close()
 
 	if atomic.LoadInt32(&callCount) != 2 {
 		t.Errorf("Expected 2 server calls after second request (conditional), got %d", callCount)
@@ -155,7 +155,7 @@ func TestClientConditionalRequests(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Third request failed: %v", err)
 	}
-	resp3.Body.Close()
+	_ = resp3.Body.Close()
 
 	if atomic.LoadInt32(&callCount) != 3 {
 		t.Errorf("Expected 3 server calls after third request, got %d", callCount)
@@ -172,7 +172,7 @@ func TestClientSWRMode(t *testing.T) {
 		w.Header().Set("ETag", etag)
 		w.Header().Set("Cache-Control", "max-age=1, stale-while-revalidate=300")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(fmt.Sprintf("response %d", count)))
+		_, _ = fmt.Fprintf(w, "response %d", count)
 	}))
 	defer server.Close()
 
@@ -191,7 +191,7 @@ func TestClientSWRMode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("First request failed: %v", err)
 	}
-	resp1.Body.Close()
+	_ = resp1.Body.Close()
 
 	if atomic.LoadInt32(&callCount) != 1 {
 		t.Errorf("Expected 1 server call after first request, got %d", callCount)
@@ -205,7 +205,7 @@ func TestClientSWRMode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Second request failed: %v", err)
 	}
-	resp2.Body.Close()
+	_ = resp2.Body.Close()
 
 	// The response should be served immediately (stale)
 	cacheStatus := resp2.Header.Get("X-Cache-Status")
@@ -234,7 +234,7 @@ func TestClientSingleFlight(t *testing.T) {
 
 		w.Header().Set("Cache-Control", "max-age=3600")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("response"))
+		_, _ = w.Write([]byte("response"))
 	}))
 	defer server.Close()
 
@@ -262,7 +262,7 @@ func TestClientSingleFlight(t *testing.T) {
 				errors <- err
 				return
 			}
-			resp.Body.Close()
+			_ = resp.Body.Close()
 		}()
 	}
 
@@ -287,7 +287,7 @@ func TestClientLegacyCacheCompatibility(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		atomic.AddInt32(&callCount, 1)
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("response"))
+		_, _ = w.Write([]byte("response"))
 	}))
 	defer server.Close()
 
@@ -303,7 +303,7 @@ func TestClientLegacyCacheCompatibility(t *testing.T) {
 	if err != nil {
 		t.Fatalf("First request failed: %v", err)
 	}
-	resp1.Body.Close()
+	_ = resp1.Body.Close()
 
 	if atomic.LoadInt32(&callCount) != 1 {
 		t.Errorf("Expected 1 server call after first request, got %d", callCount)
@@ -314,7 +314,7 @@ func TestClientLegacyCacheCompatibility(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Second request failed: %v", err)
 	}
-	resp2.Body.Close()
+	_ = resp2.Body.Close()
 
 	if atomic.LoadInt32(&callCount) != 1 {
 		t.Errorf("Expected 1 server call after second request (cache hit), got %d", callCount)
@@ -328,7 +328,7 @@ func TestClientNoCacheDirective(t *testing.T) {
 		atomic.AddInt32(&callCount, 1)
 		w.Header().Set("Cache-Control", "no-cache")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("response"))
+		_, _ = w.Write([]byte("response"))
 	}))
 	defer server.Close()
 
@@ -347,7 +347,7 @@ func TestClientNoCacheDirective(t *testing.T) {
 	if err != nil {
 		t.Fatalf("First request failed: %v", err)
 	}
-	resp1.Body.Close()
+	_ = resp1.Body.Close()
 
 	if atomic.LoadInt32(&callCount) != 1 {
 		t.Errorf("Expected 1 server call after first request, got %d", callCount)
@@ -358,7 +358,7 @@ func TestClientNoCacheDirective(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Second request failed: %v", err)
 	}
-	resp2.Body.Close()
+	_ = resp2.Body.Close()
 
 	// Depending on implementation, this might still be 1 if the response was cached
 	// but revalidation was triggered due to no-cache
@@ -384,7 +384,7 @@ func TestClientMustRevalidateDirective(t *testing.T) {
 		w.Header().Set("ETag", etag)
 		w.Header().Set("Cache-Control", "max-age=3600, must-revalidate")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("response"))
+		_, _ = w.Write([]byte("response"))
 	}))
 	defer server.Close()
 
@@ -403,7 +403,7 @@ func TestClientMustRevalidateDirective(t *testing.T) {
 	if err != nil {
 		t.Fatalf("First request failed: %v", err)
 	}
-	resp1.Body.Close()
+	_ = resp1.Body.Close()
 
 	if atomic.LoadInt32(&callCount) != 1 {
 		t.Errorf("Expected 1 server call after first request, got %d", callCount)
@@ -414,7 +414,7 @@ func TestClientMustRevalidateDirective(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Second request failed: %v", err)
 	}
-	resp2.Body.Close()
+	_ = resp2.Body.Close()
 
 	// Should make conditional request due to must-revalidate
 	finalCallCount := atomic.LoadInt32(&callCount)

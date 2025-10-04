@@ -50,7 +50,7 @@ func (cp *DefaultCacheProvider) Set(ctx context.Context, key string, resp *http.
 		if err != nil {
 			return
 		}
-		resp.Body.Close()
+		_ = resp.Body.Close()
 
 		// Create a new body for downstream consumption
 		resp.Body = io.NopCloser(bytes.NewReader(body))
@@ -130,7 +130,7 @@ func (cp *HTTPSemanticsCacheProvider) Set(ctx context.Context, key string, resp 
 		if err != nil {
 			return
 		}
-		resp.Body.Close()
+		_ = resp.Body.Close()
 
 		// Create a new body for downstream consumption
 		resp.Body = io.NopCloser(bytes.NewReader(body))
