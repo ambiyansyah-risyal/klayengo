@@ -324,6 +324,90 @@ client := klayengo.New(
 )
 ```
 
+## 🚨 Error Handling
+
+klayengo provides typed errors and consistent error wrapping for better observability and easier error handling.
+
+### Sentinel Errors
+
+Use sentinel errors to check for specific failure conditions:
+
+```go
+resp, err := client.Get(ctx, "https://api.example.com/data")
+if err != nil {
+    // Check for specific error types
+    if errors.Is(err, klayengo.ErrCircuitOpen) {
+        log.Println("Circuit breaker is open - service unavailable")
+        return
+    }
+    
+    if errors.Is(err, klayengo.ErrRateLimited) {
+        log.Println("Rate limited - backing off")
+        time.Sleep(time.Second)
+        return
+    }
+    
+    if errors.Is(err, klayengo.ErrRetryBudgetExceeded) {
+        log.Println("Retry budget exhausted - failing fast")
+        return
+    }
+    
+    // Extract detailed error information
+    var clientErr *klayengo.ClientError
+    if errors.As(err, &clientErr) {
+        log.Printf("Request failed: %s (attempt %d/%d)", 
+            clientErr.Message, clientErr.Attempt, clientErr.MaxRetries)
+        
+        // Print detailed debug information
+        fmt.Println(clientErr.DebugInfo())
+    }
+}
+```
+
+### Transient Error Detection
+
+Use `IsTransient()` to determine if an error is worth retrying:
+
+```go
+resp, err := client.Get(ctx, "https://api.example.com/data")
+if err != nil {
+    if klayengo.IsTransient(err) {
+        log.Println("Transient error - will be retried automatically")
+        // Network errors, timeouts, 5xx responses, 429 rate limiting
+    } else {
+        log.Println("Permanent error - won't retry")
+        // 4xx client errors (except 429), configuration errors
+        return err
+    }
+}
+```
+
+### Error Wrapping Chain
+
+All errors maintain proper wrapping chains for root cause analysis:
+
+```go
+resp, err := client.Get(ctx, "https://api.example.com/data")
+if err != nil {
+    // Walk through the error chain
+    fmt.Printf("Error chain: %+v\n", err)
+    
+    // Find root cause
+    cause := err
+    for errors.Unwrap(cause) != nil {
+        cause = errors.Unwrap(cause)
+    }
+    fmt.Printf("Root cause: %v\n", cause)
+}
+```
+
+### Available Sentinel Errors
+
+- `ErrCircuitOpen` - Circuit breaker is in open state
+- `ErrRateLimited` - Request denied due to rate limiting  
+- `ErrCacheMiss` - Cache lookup failed (for custom cache implementations)
+- `ErrRetryBudgetExceeded` - Retry budget exhausted
+
 ## ⚡ Performance
 
 ### HTTP Cache Semantics Benchmarks

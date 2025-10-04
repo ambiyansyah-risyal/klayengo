@@ -332,7 +332,7 @@ func (c *Client) doWithRetry(req *http.Request, attempt int, requestID string, s
 			c.metrics.RecordError("RateLimit", req.Method, endpoint)
 			c.metrics.RecordRateLimiterExceeded(limiterKey)
 		}
-		return nil, c.createClientError(ErrorTypeRateLimit, "rate limit exceeded", nil, requestID, req, attempt, time.Since(startTime))
+		return nil, c.createClientError(ErrorTypeRateLimit, "rate limit exceeded", ErrRateLimited, requestID, req, attempt, time.Since(startTime))
 	}
 
 	if c.limiterRegistry != nil && c.metrics != nil {
@@ -360,7 +360,7 @@ func (c *Client) doWithRetry(req *http.Request, attempt int, requestID string, s
 		if c.metrics != nil {
 			c.metrics.RecordError("CircuitBreaker", req.Method, endpoint)
 		}
-		return nil, c.createClientError(ErrorTypeCircuitOpen, "circuit breaker is open", nil, requestID, req, attempt, time.Since(startTime))
+		return nil, c.createClientError(ErrorTypeCircuitOpen, "circuit breaker is open", ErrCircuitOpen, requestID, req, attempt, time.Since(startTime))
 	}
 
 	if attempt > 0 {
@@ -427,7 +427,7 @@ func (c *Client) doWithRetry(req *http.Request, attempt int, requestID string, s
 			if c.debug != nil && c.debug.Enabled && c.debug.LogRetries && c.logger != nil {
 				c.logger.Warn("Retry budget exceeded", "requestID", requestID, "endpoint", endpoint)
 			}
-			return nil, c.createClientError(ErrorTypeRetryBudgetExceeded, "retry budget exceeded", nil, requestID, req, attempt, time.Since(startTime))
+			return nil, c.createClientError(ErrorTypeRetryBudgetExceeded, "retry budget exceeded", ErrRetryBudgetExceeded, requestID, req, attempt, time.Since(startTime))
 		}
 
 		if c.debug != nil && c.debug.Enabled && c.debug.LogRetries && c.logger != nil {
@@ -570,10 +570,16 @@ func DefaultRetryCondition(resp *http.Response, err error) bool {
 func (c *Client) createClientError(errorType, message string, cause error, requestID string, req *http.Request, attempt int, duration time.Duration) *ClientError {
 	endpoint := getEndpointFromRequest(req)
 
+	// Wrap the cause error properly if it exists
+	var wrappedCause error
+	if cause != nil {
+		wrappedCause = fmt.Errorf("%s: %w", message, cause)
+	}
+
 	return &ClientError{
 		Type:       errorType,
 		Message:    message,
-		Cause:      cause,
+		Cause:      wrappedCause,
 		RequestID:  requestID,
 		Method:     req.Method,
 		URL:        req.URL.String(),

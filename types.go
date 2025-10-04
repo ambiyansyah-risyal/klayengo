@@ -303,8 +303,4 @@ func (bs BackoffStrategy) String() string {
 	}
 }
 
-// ErrRetryBudgetExceeded is returned when the retry budget is exhausted.
-var ErrRetryBudgetExceeded = &ClientError{
-	Type:    ErrorTypeRetryBudgetExceeded,
-	Message: "retry budget exceeded",
-}
+

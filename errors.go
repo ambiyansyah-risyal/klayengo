@@ -1,9 +1,55 @@
 package klayengo
 
 import (
+	"errors"
 	"fmt"
 	"time"
 )
+
+// Sentinel errors for common failure scenarios
+var (
+	// ErrCircuitOpen is returned when the circuit breaker is in open state
+	ErrCircuitOpen = errors.New("klayengo: circuit open")
+	
+	// ErrRateLimited is returned when a request is denied due to rate limiting
+	ErrRateLimited = errors.New("klayengo: rate limited")
+	
+	// ErrCacheMiss is returned when a cache lookup fails
+	ErrCacheMiss = errors.New("klayengo: cache miss")
+	
+	// ErrRetryBudgetExceeded is returned when retry budget is exhausted
+	ErrRetryBudgetExceeded = errors.New("klayengo: retry budget exceeded")
+)
+
+// IsTransient determines if an error represents a transient failure that might succeed on retry.
+// Returns true for network errors, timeouts, 5xx server responses, and rate limiting (429).
+// Returns false for 4xx client errors (except 429) and configuration errors.
+func IsTransient(err error) bool {
+	if err == nil {
+		return false
+	}
+	
+	// Check for our sentinel errors
+	if errors.Is(err, ErrCircuitOpen) || errors.Is(err, ErrRateLimited) || errors.Is(err, ErrRetryBudgetExceeded) {
+		return true
+	}
+	
+	// Check for ClientError types
+	var clientErr *ClientError
+	if errors.As(err, &clientErr) {
+		switch clientErr.Type {
+		case ErrorTypeNetwork, ErrorTypeTimeout, ErrorTypeServer, ErrorTypeRateLimit, ErrorTypeCircuitOpen:
+			return true
+		case ErrorTypeClient:
+			// 429 Too Many Requests is transient
+			return clientErr.StatusCode == 429
+		default:
+			return false
+		}
+	}
+	
+	return false
+}
 
 // Error implements error interface.
 func (e *ClientError) Error() string {

@@ -2,6 +2,7 @@ package klayengo
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -293,4 +294,287 @@ func TestClientErrorNilHandling(t *testing.T) {
 	if debugInfo != "Error: <nil>" {
 		t.Errorf("Nil error DebugInfo() should return 'Error: <nil>', got '%s'", debugInfo)
 	}
+}
+
+func TestSentinelErrors(t *testing.T) {
+	tests := []struct {
+		name     string
+		sentinel error
+		expected string
+	}{
+		{"ErrCircuitOpen", ErrCircuitOpen, "klayengo: circuit open"},
+		{"ErrRateLimited", ErrRateLimited, "klayengo: rate limited"},
+		{"ErrCacheMiss", ErrCacheMiss, "klayengo: cache miss"},
+		{"ErrRetryBudgetExceeded", ErrRetryBudgetExceeded, "klayengo: retry budget exceeded"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if test.sentinel.Error() != test.expected {
+				t.Errorf("Expected '%s', got '%s'", test.expected, test.sentinel.Error())
+			}
+		})
+	}
+}
+
+func TestErrorsIs(t *testing.T) {
+	// Test that ClientError with wrapped sentinels work with errors.Is
+	networkErr := &ClientError{
+		Type:    ErrorTypeNetwork,
+		Message: "network request failed",
+		Cause:   fmt.Errorf("network request failed: %w", fmt.Errorf("connection timeout")),
+	}
+
+	rateLimitErr := &ClientError{
+		Type:    ErrorTypeRateLimit,
+		Message: "rate limit exceeded",
+		Cause:   fmt.Errorf("rate limit exceeded: %w", ErrRateLimited),
+	}
+
+	circuitErr := &ClientError{
+		Type:    ErrorTypeCircuitOpen,
+		Message: "circuit breaker is open",
+		Cause:   fmt.Errorf("circuit breaker is open: %w", ErrCircuitOpen),
+	}
+
+	retryBudgetErr := &ClientError{
+		Type:    ErrorTypeRetryBudgetExceeded,
+		Message: "retry budget exceeded",
+		Cause:   fmt.Errorf("retry budget exceeded: %w", ErrRetryBudgetExceeded),
+	}
+
+	// Test that errors.Is works with our sentinel errors
+	if !errors.Is(rateLimitErr, ErrRateLimited) {
+		t.Error("Rate limit error should match ErrRateLimited sentinel")
+	}
+
+	if !errors.Is(circuitErr, ErrCircuitOpen) {
+		t.Error("Circuit breaker error should match ErrCircuitOpen sentinel")
+	}
+
+	if !errors.Is(retryBudgetErr, ErrRetryBudgetExceeded) {
+		t.Error("Retry budget error should match ErrRetryBudgetExceeded sentinel")
+	}
+
+	// Test that errors.Is doesn't match wrong sentinels
+	if errors.Is(networkErr, ErrRateLimited) {
+		t.Error("Network error should not match ErrRateLimited sentinel")
+	}
+
+	if errors.Is(rateLimitErr, ErrCircuitOpen) {
+		t.Error("Rate limit error should not match ErrCircuitOpen sentinel")
+	}
+}
+
+func TestErrorsAs(t *testing.T) {
+	originalErr := &ClientError{
+		Type:    ErrorTypeServer,
+		Message: "server error",
+		Cause:   fmt.Errorf("server error: %w", fmt.Errorf("500 status")),
+	}
+
+	// Test that errors.As works with ClientError
+	var clientErr *ClientError
+	if !errors.As(originalErr, &clientErr) {
+		t.Error("Should be able to extract ClientError with errors.As")
+	}
+
+	if clientErr.Type != ErrorTypeServer {
+		t.Errorf("Expected Type='%s', got '%s'", ErrorTypeServer, clientErr.Type)
+	}
+
+	// Test that errors.As works through wrapping
+	wrappedErr := fmt.Errorf("wrapped: %w", originalErr)
+	if !errors.As(wrappedErr, &clientErr) {
+		t.Error("Should be able to extract ClientError through wrapping")
+	}
+
+	if clientErr.Type != ErrorTypeServer {
+		t.Errorf("Expected Type='%s' through wrapping, got '%s'", ErrorTypeServer, clientErr.Type)
+	}
+}
+
+func TestIsTransient(t *testing.T) {
+	tests := []struct {
+		name      string
+		err       error
+		transient bool
+	}{
+		{
+			name:      "nil error",
+			err:       nil,
+			transient: false,
+		},
+		{
+			name:      "circuit open sentinel",
+			err:       ErrCircuitOpen,
+			transient: true,
+		},
+		{
+			name:      "rate limited sentinel",
+			err:       ErrRateLimited,
+			transient: true,
+		},
+		{
+			name:      "retry budget exceeded sentinel",
+			err:       ErrRetryBudgetExceeded,
+			transient: true,
+		},
+		{
+			name:      "cache miss sentinel",
+			err:       ErrCacheMiss,
+			transient: false,
+		},
+		{
+			name: "network error",
+			err: &ClientError{
+				Type:    ErrorTypeNetwork,
+				Message: "connection failed",
+			},
+			transient: true,
+		},
+		{
+			name: "timeout error",
+			err: &ClientError{
+				Type:    ErrorTypeTimeout,
+				Message: "request timed out",
+			},
+			transient: true,
+		},
+		{
+			name: "server error (5xx)",
+			err: &ClientError{
+				Type:       ErrorTypeServer,
+				Message:    "internal server error",
+				StatusCode: 500,
+			},
+			transient: true,
+		},
+		{
+			name: "client error (4xx - not 429)",
+			err: &ClientError{
+				Type:       ErrorTypeClient,
+				Message:    "bad request",
+				StatusCode: 400,
+			},
+			transient: false,
+		},
+		{
+			name: "client error (429 Too Many Requests)",
+			err: &ClientError{
+				Type:       ErrorTypeClient,
+				Message:    "too many requests",
+				StatusCode: 429,
+			},
+			transient: true,
+		},
+		{
+			name: "configuration error",
+			err: &ClientError{
+				Type:    ErrorTypeConfig,
+				Message: "invalid configuration",
+			},
+			transient: false,
+		},
+		{
+			name:      "non-ClientError",
+			err:       fmt.Errorf("some random error"),
+			transient: false,
+		},
+		{
+			name: "wrapped sentinel error",
+			err:  fmt.Errorf("wrapped: %w", ErrRateLimited),
+			transient: true,
+		},
+		{
+			name: "wrapped ClientError",
+			err: fmt.Errorf("wrapper: %w", &ClientError{
+				Type:    ErrorTypeNetwork,
+				Message: "connection failed",
+			}),
+			transient: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			result := IsTransient(test.err)
+			if result != test.transient {
+				t.Errorf("IsTransient(%v) = %v, expected %v", test.err, result, test.transient)
+			}
+		})
+	}
+}
+
+func TestErrorWrappingChain(t *testing.T) {
+	// Test that error wrapping preserves the root cause through multiple layers
+	rootCause := fmt.Errorf("connection refused")
+	
+	wrappedErr := &ClientError{
+		Type:    ErrorTypeNetwork,
+		Message: "network request failed",
+		Cause:   fmt.Errorf("network request failed: %w", rootCause),
+	}
+	
+	outerErr := fmt.Errorf("request failed: %w", wrappedErr)
+	
+	// Should be able to unwrap to ClientError
+	var clientErr *ClientError
+	if !errors.As(outerErr, &clientErr) {
+		t.Error("Should be able to extract ClientError from wrapped chain")
+	}
+	
+	// Should be able to find root cause
+	if !errors.Is(outerErr, rootCause) {
+		t.Error("Should be able to find root cause through wrapping chain")
+	}
+	
+	// Should preserve ClientError type matching
+	if !errors.Is(outerErr, &ClientError{Type: ErrorTypeNetwork}) {
+		t.Error("Should match ClientError type through wrapping chain")
+	}
+}
+
+func FuzzErrorWrapping(f *testing.F) {
+	// Add seed inputs
+	f.Add("network error", "connection failed")
+	f.Add("timeout", "request timed out")
+	f.Add("server error", "internal server error")
+	
+	f.Fuzz(func(t *testing.T, errorType, message string) {
+		// Create a root cause error
+		rootCause := fmt.Errorf("root cause: %s", message)
+		
+		// Create a ClientError with wrapped root cause
+		clientErr := &ClientError{
+			Type:    errorType,
+			Message: message,
+			Cause:   fmt.Errorf("%s: %w", message, rootCause),
+		}
+		
+		// Wrap it multiple times
+		wrapped1 := fmt.Errorf("layer1: %w", clientErr)
+		wrapped2 := fmt.Errorf("layer2: %w", wrapped1)
+		wrapped3 := fmt.Errorf("layer3: %w", wrapped2)
+		
+		// Should always be able to extract the ClientError
+		var extractedErr *ClientError
+		if !errors.As(wrapped3, &extractedErr) {
+			t.Error("Should always be able to extract ClientError from wrapped chain")
+		}
+		
+		// Should preserve the original type and message
+		if extractedErr.Type != errorType {
+			t.Errorf("Error type not preserved: expected %s, got %s", errorType, extractedErr.Type)
+		}
+		
+		if extractedErr.Message != message {
+			t.Errorf("Error message not preserved: expected %s, got %s", message, extractedErr.Message)
+		}
+		
+		// Should be able to find root cause
+		if !errors.Is(wrapped3, rootCause) {
+			t.Error("Root cause should be findable through wrapping chain")
+		}
+	})
 }
