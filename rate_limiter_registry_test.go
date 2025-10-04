@@ -10,19 +10,19 @@ import (
 )
 
 const (
-	testHost         = "api.example.com"
-	testHostKey      = "host:api.example.com"
-	defaultKey       = "default"
-	fallbackMsg      = "Expected fallback limiter, got %v"
-	keyMsg           = "Expected key '%s', got %s"
-	firstReqMsg      = "First request should be allowed"
-	secondReqMsg     = "Second request should be denied"
-	concurrentMsg    = "Concurrent access failed: expected %s, got %s"
-	hostKeyMsg       = "Expected host key %s, got %s"
-	routeKeyMsg      = "Expected route key %s, got %s"
-	hostRouteKeyMsg  = "Expected host-route key %s, got %s"
-	nilLimiterMsg    = "Expected nil limiter, got %v"
-	allowMsg         = "Expected request to be allowed when no limiter is configured"
+	testHost        = "api.example.com"
+	testHostKey     = "host:api.example.com"
+	defaultKey      = "default"
+	fallbackMsg     = "Expected fallback limiter, got %v"
+	keyMsg          = "Expected key '%s', got %s"
+	firstReqMsg     = "First request should be allowed"
+	secondReqMsg    = "Second request should be denied"
+	concurrentMsg   = "Concurrent access failed: expected %s, got %s"
+	hostKeyMsg      = "Expected host key %s, got %s"
+	routeKeyMsg     = "Expected route key %s, got %s"
+	hostRouteKeyMsg = "Expected host-route key %s, got %s"
+	nilLimiterMsg   = "Expected nil limiter, got %v"
+	allowMsg        = "Expected request to be allowed when no limiter is configured"
 )
 
 func TestRateLimiterRegistryGetLimiter(t *testing.T) {
@@ -183,36 +183,36 @@ func TestRateLimiterRegistryMetricsIntegration(t *testing.T) {
 	registry := NewRateLimiterRegistry(DefaultHostKeyFunc, nil)
 	limiter1 := NewRateLimiter(1, time.Hour) // Very slow refill
 	limiter2 := NewRateLimiter(1, time.Hour) // Very slow refill
-	
+
 	// Register limiters for different hosts
 	registry.RegisterLimiter("host:api.example.com", limiter1)
 	registry.RegisterLimiter("host:web.example.com", limiter2)
-	
+
 	req1 := &http.Request{URL: &url.URL{Host: "api.example.com"}}
 	req2 := &http.Request{URL: &url.URL{Host: "web.example.com"}}
-	
+
 	// First requests should be allowed
 	allowed1, key1 := registry.Allow(req1)
 	allowed2, key2 := registry.Allow(req2)
-	
+
 	if !allowed1 {
 		t.Error("First request to api.example.com should be allowed")
 	}
 	if !allowed2 {
-		t.Error("First request to web.example.com should be allowed")  
+		t.Error("First request to web.example.com should be allowed")
 	}
-	
+
 	if key1 != "host:api.example.com" {
 		t.Errorf("Expected key 'host:api.example.com', got %s", key1)
 	}
 	if key2 != "host:web.example.com" {
 		t.Errorf("Expected key 'host:web.example.com', got %s", key2)
 	}
-	
+
 	// Second requests should be denied (each limiter only has 1 token)
 	denied1, _ := registry.Allow(req1)
 	denied2, _ := registry.Allow(req2)
-	
+
 	if denied1 {
 		t.Error("Second request to api.example.com should be denied")
 	}

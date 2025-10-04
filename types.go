@@ -1,6 +1,7 @@
 package klayengo
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"sync"
@@ -49,6 +50,12 @@ type CacheEntry struct {
 	StatusCode int
 	Header     http.Header
 	ExpiresAt  time.Time
+	// HTTP cache semantics fields
+	ETag         string
+	LastModified *time.Time
+	MaxAge       *time.Duration
+	StaleAt      *time.Time // When entry becomes stale for SWR
+	IsStale      bool       // Whether entry is stale but still servable in SWR mode
 }
 
 // Cache abstracts a simple TTL key/value store used for responses.
@@ -57,6 +64,33 @@ type Cache interface {
 	Set(key string, entry *CacheEntry, ttl time.Duration)
 	Delete(key string)
 	Clear()
+}
+
+// CacheProvider is the new interface supporting HTTP cache semantics and context.
+type CacheProvider interface {
+	Get(ctx context.Context, key string) (resp *http.Response, ok bool)
+	Set(ctx context.Context, key string, resp *http.Response, ttl time.Duration)
+	Invalidate(ctx context.Context, key string)
+}
+
+// CacheMode determines cache behavior strategy.
+type CacheMode int
+
+const (
+	// TTLOnly uses fixed TTL-based caching (default behavior).
+	TTLOnly CacheMode = iota
+	// HTTPSemantics honors Cache-Control, ETag, Last-Modified headers.
+	HTTPSemantics
+	// SWR enables Stale-While-Revalidate mode.
+	SWR
+)
+
+// singleFlightEntry represents a single in-flight request for stampede protection.
+type singleFlightEntry struct {
+	wg   sync.WaitGroup
+	resp *http.Response
+	err  error
+	done bool
 }
 
 // CacheCondition returns true if a request should be cached.

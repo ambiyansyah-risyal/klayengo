@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -34,6 +35,10 @@ type Client struct {
 	cacheTTL          time.Duration
 	cacheKeyFunc      func(*http.Request) string
 	cacheCondition    CacheCondition
+	cacheProvider     CacheProvider
+	cacheMode         CacheMode
+	singleFlight      map[string]*singleFlightEntry
+	singleFlightMu    sync.RWMutex
 	metrics           *MetricsCollector
 	debug             *DebugConfig
 	logger            Logger
@@ -69,6 +74,9 @@ func New(options ...Option) *Client {
 		cacheTTL:          5 * time.Minute,
 		cacheKeyFunc:      DefaultCacheKeyFunc,
 		cacheCondition:    DefaultCacheCondition,
+		cacheProvider:     nil,
+		cacheMode:         TTLOnly,
+		singleFlight:      make(map[string]*singleFlightEntry),
 		metrics:           nil,
 		debug:             DefaultDebugConfig(),
 		logger:            nil,
@@ -157,38 +165,92 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 		}
 	}
 
-	cacheEnabled := c.cache != nil && c.cacheCondition(req)
+	// Handle cache with new modes
+	cacheEnabled := (c.cache != nil || c.cacheProvider != nil) && c.cacheCondition(req)
 
 	if cacheEnabled {
 		cacheKey := c.cacheKeyFunc(req)
-		if entry, found := c.cache.Get(cacheKey); found {
-			if c.debug != nil && c.debug.Enabled && c.debug.LogCache && c.logger != nil {
-				c.logger.Debug("Cache hit", "requestID", requestID, "cacheKey", cacheKey)
-			}
 
-			if c.metrics != nil {
-				c.metrics.RecordCacheHit(req.Method, endpoint)
-			}
+		// Try new cache provider first if available
+		if c.cacheProvider != nil && (c.cacheMode == HTTPSemantics || c.cacheMode == SWR) {
+			if resp, found := c.cacheProvider.Get(req.Context(), cacheKey); found {
+				if c.debug != nil && c.debug.Enabled && c.debug.LogCache && c.logger != nil {
+					c.logger.Debug("Cache provider hit", "requestID", requestID, "cacheKey", cacheKey, "mode", c.cacheMode)
+				}
 
-			duration := time.Since(start)
-			if c.metrics != nil {
-				c.metrics.RecordRequestEnd(req.Method, endpoint)
-				c.metrics.RecordRequest(req.Method, endpoint, entry.StatusCode, duration)
-			}
+				if c.metrics != nil {
+					c.metrics.RecordCacheHit(req.Method, endpoint)
+				}
 
-			return c.createResponseFromCache(entry), nil
+				duration := time.Since(start)
+				if c.metrics != nil {
+					c.metrics.RecordRequestEnd(req.Method, endpoint)
+					c.metrics.RecordRequest(req.Method, endpoint, resp.StatusCode, duration)
+				}
+
+				return resp, nil
+			}
+		} else if c.cache != nil {
+			// Fall back to legacy cache for TTLOnly mode
+			if entry, found := c.cache.Get(cacheKey); found {
+				// For HTTP semantics mode, handle conditional requests even with legacy cache
+				if c.cacheMode == HTTPSemantics {
+					return c.handleHTTPSemanticsCacheHit(req, entry, cacheKey)
+				}
+
+				if c.debug != nil && c.debug.Enabled && c.debug.LogCache && c.logger != nil {
+					c.logger.Debug("Cache hit", "requestID", requestID, "cacheKey", cacheKey)
+				}
+
+				if c.metrics != nil {
+					c.metrics.RecordCacheHit(req.Method, endpoint)
+				}
+
+				duration := time.Since(start)
+				if c.metrics != nil {
+					c.metrics.RecordRequestEnd(req.Method, endpoint)
+					c.metrics.RecordRequest(req.Method, endpoint, entry.StatusCode, duration)
+				}
+
+				return c.createResponseFromCache(entry), nil
+			}
 		}
+
 		if c.metrics != nil {
 			c.metrics.RecordCacheMiss(req.Method, endpoint)
 		}
 
 		if c.debug != nil && c.debug.Enabled && c.debug.LogCache && c.logger != nil {
-			cacheKey := c.cacheKeyFunc(req)
 			c.logger.Debug("Cache miss", "requestID", requestID, "cacheKey", cacheKey)
 		}
 	}
 
-	resp, err := c.doWithRetry(req, 0, requestID, start)
+	// Use single-flight protection for cache misses to prevent stampedes
+	var resp *http.Response
+	var err error
+	var skipCaching bool
+
+	if cacheEnabled && (c.cacheMode == HTTPSemantics || c.cacheMode == SWR) {
+		cacheKey := c.cacheKeyFunc(req)
+		resp, err = c.singleFlightDo(cacheKey, func() (*http.Response, error) {
+			httpResp, httpErr := c.doWithRetry(req, 0, requestID, start)
+
+			// Cache the response here in the single-flight function to avoid races
+			if httpErr == nil && httpResp.StatusCode < 400 && c.cacheProvider != nil {
+				ttl := c.getCacheTTLForRequest(req)
+				c.cacheProvider.Set(req.Context(), cacheKey, httpResp, ttl)
+
+				if c.debug != nil && c.debug.Enabled && c.debug.LogCache && c.logger != nil {
+					c.logger.Debug("Response cached via provider", "requestID", requestID, "cacheKey", cacheKey, "mode", c.cacheMode)
+				}
+			}
+
+			return httpResp, httpErr
+		})
+		skipCaching = true // Skip caching below since we already did it in single-flight
+	} else {
+		resp, err = c.doWithRetry(req, 0, requestID, start)
+	}
 
 	if c.metrics != nil {
 		c.metrics.RecordRequestEnd(req.Method, endpoint)
@@ -203,26 +265,38 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 		c.metrics.RecordRequest(req.Method, endpoint, statusCode, duration)
 	}
 
-	if cacheEnabled && err == nil && resp.StatusCode < 400 {
+	if cacheEnabled && err == nil && resp.StatusCode < 400 && !skipCaching {
 		cacheKey := c.cacheKeyFunc(req)
-		entry := c.createCacheEntry(resp)
-		ttl := c.getCacheTTLForRequest(req)
-		c.cache.Set(cacheKey, entry, ttl)
 
-		if inMemoryCache, ok := c.cache.(*InMemoryCache); ok {
-			totalSize := 0
-			for _, shard := range inMemoryCache.shards {
-				shard.mu.RLock()
-				totalSize += len(shard.store)
-				shard.mu.RUnlock()
-			}
-			if c.metrics != nil {
-				c.metrics.RecordCacheSize("default", totalSize)
-			}
-		}
+		// Use new cache provider if available
+		if c.cacheProvider != nil {
+			ttl := c.getCacheTTLForRequest(req)
+			c.cacheProvider.Set(req.Context(), cacheKey, resp, ttl)
 
-		if c.debug != nil && c.debug.Enabled && c.debug.LogCache && c.logger != nil {
-			c.logger.Debug("Response cached", "requestID", requestID, "cacheKey", cacheKey, "ttl", ttl)
+			if c.debug != nil && c.debug.Enabled && c.debug.LogCache && c.logger != nil {
+				c.logger.Debug("Response cached via provider", "requestID", requestID, "cacheKey", cacheKey, "mode", c.cacheMode)
+			}
+		} else if c.cache != nil {
+			// Fall back to legacy cache
+			entry := c.createCacheEntry(resp)
+			ttl := c.getCacheTTLForRequest(req)
+			c.cache.Set(cacheKey, entry, ttl)
+
+			if inMemoryCache, ok := c.cache.(*InMemoryCache); ok {
+				totalSize := 0
+				for _, shard := range inMemoryCache.shards {
+					shard.mu.RLock()
+					totalSize += len(shard.store)
+					shard.mu.RUnlock()
+				}
+				if c.metrics != nil {
+					c.metrics.RecordCacheSize("default", totalSize)
+				}
+			}
+
+			if c.debug != nil && c.debug.Enabled && c.debug.LogCache && c.logger != nil {
+				c.logger.Debug("Response cached", "requestID", requestID, "cacheKey", cacheKey, "ttl", ttl)
+			}
 		}
 	}
 
@@ -552,4 +626,96 @@ func getEndpointFromRequest(req *http.Request) string {
 	}
 
 	return builder.String()
+}
+
+// singleFlightDo executes a request with single-flight protection to prevent stampede.
+func (c *Client) singleFlightDo(key string, fn func() (*http.Response, error)) (*http.Response, error) {
+	c.singleFlightMu.Lock()
+	if entry, exists := c.singleFlight[key]; exists {
+		c.singleFlightMu.Unlock()
+		entry.wg.Wait()
+		return entry.resp, entry.err
+	}
+
+	// Create new entry
+	entry := &singleFlightEntry{}
+	entry.wg.Add(1)
+	c.singleFlight[key] = entry
+	c.singleFlightMu.Unlock()
+
+	// Execute the function
+	resp, err := fn()
+
+	// Complete the entry
+	entry.resp = resp
+	entry.err = err
+	entry.done = true
+	entry.wg.Done()
+
+	// Clean up after a short delay
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		c.singleFlightMu.Lock()
+		delete(c.singleFlight, key)
+		c.singleFlightMu.Unlock()
+	}()
+
+	return resp, err
+}
+
+// performConditionalRequest performs a conditional request using If-None-Match/If-Modified-Since.
+func (c *Client) performConditionalRequest(req *http.Request, entry *CacheEntry) (*http.Response, error) {
+	// Clone request to avoid modifying original
+	conditionalReq := req.Clone(req.Context())
+	addConditionalHeaders(conditionalReq, entry)
+
+	// Perform the request
+	return c.doWithRetry(conditionalReq, 0, "", time.Now())
+}
+
+// handleHTTPSemanticsCacheHit handles cache hits with HTTP semantics.
+func (c *Client) handleHTTPSemanticsCacheHit(req *http.Request, entry *CacheEntry, cacheKey string) (*http.Response, error) {
+	cacheControl := parseCacheControl(entry.Header.Get("Cache-Control"))
+
+	// Check if revalidation is needed
+	if shouldRevalidate(entry, cacheControl) {
+		// In SWR mode, serve stale immediately and revalidate in background
+		if c.cacheMode == SWR && entry.IsStale {
+			// Start background revalidation
+			go func() {
+				_, _ = c.singleFlightDo("revalidate:"+cacheKey, func() (*http.Response, error) {
+					resp, err := c.performConditionalRequest(req, entry)
+					if err == nil && c.cacheProvider != nil {
+						// Update cache with fresh response
+						c.cacheProvider.Set(req.Context(), cacheKey, resp, 0)
+					}
+					return resp, err
+				})
+			}()
+
+			// Serve stale response immediately
+			return c.createResponseFromCache(entry), nil
+		}
+
+		// Perform conditional request
+		resp, err := c.performConditionalRequest(req, entry)
+		if err != nil {
+			return nil, err
+		}
+
+		// If not modified, serve cached version
+		if isNotModified(resp) {
+			return c.createResponseFromCache(entry), nil
+		}
+
+		// Cache the new response
+		if c.cacheProvider != nil {
+			c.cacheProvider.Set(req.Context(), cacheKey, resp, 0)
+		}
+
+		return resp, nil
+	}
+
+	// Entry is fresh, serve from cache
+	return c.createResponseFromCache(entry), nil
 }

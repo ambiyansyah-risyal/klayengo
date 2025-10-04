@@ -671,9 +671,9 @@ func TestClientWithPerRouteRateLimiting(t *testing.T) {
 }
 
 func mustParseURL(rawurl string) *url.URL {
-u, err := url.Parse(rawurl)
-if err != nil {
-panic(err)
-}
-return u
+	u, err := url.Parse(rawurl)
+	if err != nil {
+		panic(err)
+	}
+	return u
 }

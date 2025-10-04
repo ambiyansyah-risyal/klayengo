@@ -149,8 +149,8 @@ func main() {
 	fmt.Println("\n--- Testing Per-Host Rate Limiting ---")
 
 	// Create different rate limiters for different hosts
-	apiLimiter := klayengo.NewRateLimiter(5, time.Second)   // 5 req/sec for API
-	webLimiter := klayengo.NewRateLimiter(20, time.Second)  // 20 req/sec for web
+	apiLimiter := klayengo.NewRateLimiter(5, time.Second)  // 5 req/sec for API
+	webLimiter := klayengo.NewRateLimiter(20, time.Second) // 20 req/sec for web
 
 	perHostClient := klayengo.New(
 		klayengo.WithLimiterKeyFunc(klayengo.DefaultHostKeyFunc),
@@ -175,7 +175,7 @@ func main() {
 	fmt.Println("\n--- Testing Per-Route Rate Limiting ---")
 
 	// Create different rate limiters for different routes
-	jsonLimiter := klayengo.NewRateLimiter(3, time.Second) // 3 req/sec for /json
+	jsonLimiter := klayengo.NewRateLimiter(3, time.Second)  // 3 req/sec for /json
 	htmlLimiter := klayengo.NewRateLimiter(10, time.Second) // 10 req/sec for /html
 
 	perRouteClient := klayengo.New(
