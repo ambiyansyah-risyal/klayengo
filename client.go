@@ -11,6 +11,7 @@ import (
 	"time"
 
 	internalbackoff "github.com/ambiyansyah-risyal/klayengo/internal/backoff"
+	internalsingleflight "github.com/ambiyansyah-risyal/klayengo/internal/singleflight"
 )
 
 // Client is a resilient HTTP client that layers retries, circuit breaking,
@@ -40,8 +41,10 @@ type Client struct {
 	cacheCondition    CacheCondition
 	cacheProvider     CacheProvider
 	cacheMode         CacheMode
-	singleFlight      map[string]*singleFlightEntry
-	singleFlightMu    sync.RWMutex
+	singleFlight         map[string]*singleFlightEntry
+	singleFlightMu       sync.RWMutex
+	singleFlightGroup    *internalsingleflight.Group
+	singleFlightEnabled  bool
 	metrics           *MetricsCollector
 	debug             *DebugConfig
 	logger            Logger
@@ -90,6 +93,10 @@ func New(options ...Option) *Client {
 
 	// Initialize backoff calculator based on default strategy
 	client.backoffCalculator = internalbackoff.GetExponentialJitterCalculator()
+	
+	// Initialize singleflight group (disabled by default until cache SWR implementation)
+	client.singleFlightGroup = internalsingleflight.New()
+	client.singleFlightEnabled = false
 
 	for _, option := range options {
 		option(client)
@@ -657,6 +664,18 @@ func getEndpointFromRequest(req *http.Request) string {
 
 // singleFlightDo executes a request with single-flight protection to prevent stampede.
 func (c *Client) singleFlightDo(key string, fn func() (*http.Response, error)) (*http.Response, error) {
+	// Use internal singleflight group if enabled, otherwise fallback to legacy implementation
+	if c.singleFlightEnabled && c.singleFlightGroup != nil {
+		val, err := c.singleFlightGroup.Do(key, func() (interface{}, error) {
+			return fn()
+		})
+		if resp, ok := val.(*http.Response); ok {
+			return resp, err
+		}
+		return nil, err
+	}
+
+	// Legacy implementation for backward compatibility
 	c.singleFlightMu.Lock()
 	if entry, exists := c.singleFlight[key]; exists {
 		c.singleFlightMu.Unlock()

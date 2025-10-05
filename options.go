@@ -291,6 +291,14 @@ func (c *Client) ValidateConfiguration() error {
 	return nil
 }
 
+// WithSingleFlightEnabled enables the internal singleflight group for deduplicating concurrent requests.
+// This is experimental and not yet wired to cache functionality.
+func WithSingleFlightEnabled(enabled bool) Option {
+	return func(c *Client) {
+		c.singleFlightEnabled = enabled
+	}
+}
+
 func (c *Client) validateRetryConfig() []string {
 	var errors []string
 
