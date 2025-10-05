@@ -7,12 +7,14 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+
+	internalbackoff "github.com/ambiyansyah-risyal/klayengo/internal/backoff"
 )
 
 // NewDefaultRetryPolicy creates a retry policy with configurable backoff strategy that only
 // retries idempotent methods by default.
 func NewDefaultRetryPolicy(maxRetries int, initialBackoff, maxBackoff time.Duration, multiplier, jitter float64) *DefaultRetryPolicy {
-	return &DefaultRetryPolicy{
+	policy := &DefaultRetryPolicy{
 		maxRetries:        maxRetries,
 		initialBackoff:    initialBackoff,
 		maxBackoff:        maxBackoff,
@@ -21,11 +23,13 @@ func NewDefaultRetryPolicy(maxRetries int, initialBackoff, maxBackoff time.Durat
 		backoffStrategy:   ExponentialJitter, // Default to current behavior
 		isIdempotent:      DefaultIsIdempotent,
 	}
+	policy.backoffCalculator = internalbackoff.GetExponentialJitterCalculator()
+	return policy
 }
 
 // NewDefaultRetryPolicyWithStrategy creates a retry policy with a specific backoff strategy.
 func NewDefaultRetryPolicyWithStrategy(maxRetries int, initialBackoff, maxBackoff time.Duration, multiplier, jitter float64, strategy BackoffStrategy) *DefaultRetryPolicy {
-	return &DefaultRetryPolicy{
+	policy := &DefaultRetryPolicy{
 		maxRetries:        maxRetries,
 		initialBackoff:    initialBackoff,
 		maxBackoff:        maxBackoff,
@@ -34,6 +38,18 @@ func NewDefaultRetryPolicyWithStrategy(maxRetries int, initialBackoff, maxBackof
 		backoffStrategy:   strategy,
 		isIdempotent:      DefaultIsIdempotent,
 	}
+	
+	// Initialize the appropriate calculator based on strategy
+	switch strategy {
+	case ExponentialJitter:
+		policy.backoffCalculator = internalbackoff.GetExponentialJitterCalculator()
+	case DecorrelatedJitter:
+		policy.backoffCalculator = internalbackoff.GetDecorrelatedJitterCalculator()
+	default:
+		policy.backoffCalculator = internalbackoff.GetExponentialJitterCalculator()
+	}
+	
+	return policy
 }
 
 // ShouldRetry implements the RetryPolicy interface.
@@ -115,15 +131,18 @@ func parseRetryAfter(value string) time.Duration {
 }
 
 func (p *DefaultRetryPolicy) calculateBackoff(attempt int) time.Duration {
-	switch p.backoffStrategy {
-	case ExponentialJitter:
-		return p.calculateExponentialBackoff(attempt)
-	case DecorrelatedJitter:
-		return p.calculateDecorrelatedBackoff(attempt)
-	default:
-		// Fallback to exponential jitter for unknown strategies
-		return p.calculateExponentialBackoff(attempt)
+	if p.backoffCalculator == nil {
+		// Fallback to direct calculation if calculator is not initialized
+		switch p.backoffStrategy {
+		case ExponentialJitter:
+			return p.calculateExponentialBackoff(attempt)
+		case DecorrelatedJitter:
+			return p.calculateDecorrelatedBackoff(attempt)
+		default:
+			return p.calculateExponentialBackoff(attempt)
+		}
 	}
+	return p.backoffCalculator.Calculate(attempt, p.initialBackoff, p.maxBackoff, p.backoffMultiplier, p.jitter)
 }
 
 func (p *DefaultRetryPolicy) calculateExponentialBackoff(attempt int) time.Duration {
@@ -136,7 +155,7 @@ func (p *DefaultRetryPolicy) calculateExponentialBackoff(attempt int) time.Durat
 		attempt = 30
 	}
 
-	backoff := time.Duration(float64(p.initialBackoff) * pow(p.backoffMultiplier, attempt))
+	backoff := time.Duration(float64(p.initialBackoff) * internalbackoff.Pow(p.backoffMultiplier, attempt))
 	if backoff < 0 || backoff > p.maxBackoff {
 		backoff = p.maxBackoff
 	}
@@ -178,7 +197,7 @@ func (p *DefaultRetryPolicy) calculateDecorrelatedBackoff(attempt int) time.Dura
 	// random_between(base, min(cap, base * 3^attempt))
 
 	base := float64(p.initialBackoff)
-	factor := pow(3.0, attempt) // Use 3x multiplier for decorrelated jitter
+	factor := internalbackoff.Pow(3.0, attempt) // Use 3x multiplier for decorrelated jitter
 	upper := base * factor
 
 	// Prevent overflow and respect maxBackoff
@@ -244,3 +263,5 @@ func (rb *RetryBudget) GetStats() (current, max int64, windowStart time.Time) {
 		rb.maxRetries,
 		time.Unix(0, atomic.LoadInt64(&rb.windowStart))
 }
+
+

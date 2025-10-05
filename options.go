@@ -51,6 +51,7 @@ func WithJitter(f float64) Option {
 func WithBackoffStrategy(strategy BackoffStrategy) Option {
 	return func(c *Client) {
 		c.backoffStrategy = strategy
+		// Update the calculator will be done in New() after all options are applied
 	}
 }
 

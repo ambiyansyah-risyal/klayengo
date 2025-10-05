@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	internalbackoff "github.com/ambiyansyah-risyal/klayengo/internal/backoff"
 )
 
 // Client is a resilient HTTP client that layers retries, circuit breaking,
@@ -22,6 +24,7 @@ type Client struct {
 	backoffMultiplier float64
 	jitter            float64
 	backoffStrategy   BackoffStrategy
+	backoffCalculator *internalbackoff.Calculator
 	timeout           time.Duration
 	retryCondition    RetryCondition
 	retryPolicy       RetryPolicy
@@ -85,15 +88,34 @@ func New(options ...Option) *Client {
 		dedupCondition:    DefaultDeduplicationCondition,
 	}
 
+	// Initialize backoff calculator based on default strategy
+	client.backoffCalculator = internalbackoff.GetExponentialJitterCalculator()
+
 	for _, option := range options {
 		option(client)
 	}
+
+	// Update backoff calculator based on final strategy after options are applied
+	client.updateBackoffCalculator()
 
 	if err := client.ValidateConfiguration(); err != nil {
 		client.validationError = err
 	}
 
 	return client
+}
+
+// updateBackoffCalculator updates the internal backoff calculator based on the current strategy.
+func (c *Client) updateBackoffCalculator() {
+	switch c.backoffStrategy {
+	case ExponentialJitter:
+		c.backoffCalculator = internalbackoff.GetExponentialJitterCalculator()
+	case DecorrelatedJitter:
+		c.backoffCalculator = internalbackoff.GetDecorrelatedJitterCalculator()
+	default:
+		// Fallback to exponential jitter for unknown strategies
+		c.backoffCalculator = internalbackoff.GetExponentialJitterCalculator()
+	}
 }
 
 // Get performs an HTTP GET with context.
@@ -464,15 +486,18 @@ func (c *Client) executeMiddleware(req *http.Request) (*http.Response, error) {
 }
 
 func (c *Client) calculateBackoff(attempt int) time.Duration {
-	switch c.backoffStrategy {
-	case ExponentialJitter:
-		return c.calculateExponentialBackoff(attempt)
-	case DecorrelatedJitter:
-		return c.calculateDecorrelatedBackoff(attempt)
-	default:
-		// Fallback to exponential jitter for unknown strategies
-		return c.calculateExponentialBackoff(attempt)
+	if c.backoffCalculator == nil {
+		// Fallback to direct calculation if calculator is not initialized
+		switch c.backoffStrategy {
+		case ExponentialJitter:
+			return c.calculateExponentialBackoff(attempt)
+		case DecorrelatedJitter:
+			return c.calculateDecorrelatedBackoff(attempt)
+		default:
+			return c.calculateExponentialBackoff(attempt)
+		}
 	}
+	return c.backoffCalculator.Calculate(attempt, c.initialBackoff, c.maxBackoff, c.backoffMultiplier, c.jitter)
 }
 
 func (c *Client) calculateExponentialBackoff(attempt int) time.Duration {
@@ -485,7 +510,7 @@ func (c *Client) calculateExponentialBackoff(attempt int) time.Duration {
 		attempt = 30
 	}
 
-	backoff := time.Duration(float64(c.initialBackoff) * pow(c.backoffMultiplier, attempt))
+	backoff := time.Duration(float64(c.initialBackoff) * internalbackoff.Pow(c.backoffMultiplier, attempt))
 	if backoff < 0 || backoff > c.maxBackoff {
 		backoff = c.maxBackoff
 	}
@@ -527,7 +552,7 @@ func (c *Client) calculateDecorrelatedBackoff(attempt int) time.Duration {
 	// random_between(base, min(cap, base * 3^attempt))
 
 	base := float64(c.initialBackoff)
-	factor := pow(3.0, attempt) // Use 3x multiplier for decorrelated jitter
+	factor := internalbackoff.Pow(3.0, attempt) // Use 3x multiplier for decorrelated jitter
 	upper := base * factor
 
 	// Prevent overflow and respect maxBackoff
@@ -552,13 +577,9 @@ func (c *Client) calculateDecorrelatedBackoff(attempt int) time.Duration {
 	return result
 }
 
-func pow(base float64, exponent int) float64 {
-	result := 1.0
-	for i := 0; i < exponent; i++ {
-		result *= base
-	}
-	return result
-}
+
+
+
 
 func DefaultRetryCondition(resp *http.Response, err error) bool {
 	if err != nil {
