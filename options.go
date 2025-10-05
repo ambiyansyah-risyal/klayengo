@@ -51,6 +51,7 @@ func WithJitter(f float64) Option {
 func WithBackoffStrategy(strategy BackoffStrategy) Option {
 	return func(c *Client) {
 		c.backoffStrategy = strategy
+		// Update the calculator will be done in New() after all options are applied
 	}
 }
 
@@ -288,6 +289,14 @@ func (c *Client) ValidateConfiguration() error {
 	}
 
 	return nil
+}
+
+// WithSingleFlightEnabled enables the internal singleflight group for deduplicating concurrent requests.
+// This is experimental and not yet wired to cache functionality.
+func WithSingleFlightEnabled(enabled bool) Option {
+	return func(c *Client) {
+		c.singleFlightEnabled = enabled
+	}
 }
 
 func (c *Client) validateRetryConfig() []string {
