@@ -38,7 +38,7 @@ func NewDefaultRetryPolicyWithStrategy(maxRetries int, initialBackoff, maxBackof
 		backoffStrategy:   strategy,
 		isIdempotent:      DefaultIsIdempotent,
 	}
-	
+
 	// Initialize the appropriate calculator based on strategy
 	switch strategy {
 	case ExponentialJitter:
@@ -48,7 +48,7 @@ func NewDefaultRetryPolicyWithStrategy(maxRetries int, initialBackoff, maxBackof
 	default:
 		policy.backoffCalculator = internalbackoff.GetExponentialJitterCalculator()
 	}
-	
+
 	return policy
 }
 
@@ -263,5 +263,3 @@ func (rb *RetryBudget) GetStats() (current, max int64, windowStart time.Time) {
 		rb.maxRetries,
 		time.Unix(0, atomic.LoadInt64(&rb.windowStart))
 }
-
-

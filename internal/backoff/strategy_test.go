@@ -9,13 +9,13 @@ func TestExponentialJitterStrategy(t *testing.T) {
 	strategy := ExponentialJitterStrategy{}
 
 	tests := []struct {
-		name        string
-		attempt     int
-		initial     time.Duration
-		max         time.Duration
-		multiplier  float64
-		jitter      float64
-		expected    time.Duration
+		name       string
+		attempt    int
+		initial    time.Duration
+		max        time.Duration
+		multiplier float64
+		jitter     float64
+		expected   time.Duration
 	}{
 		{
 			name:       "attempt 0",
@@ -50,7 +50,7 @@ func TestExponentialJitterStrategy(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := strategy.Calculate(tt.attempt, tt.initial, tt.max, tt.multiplier, tt.jitter)
 			if result != tt.expected {
-				t.Errorf("Calculate(%d, %v, %v, %f, %f) = %v, want %v", 
+				t.Errorf("Calculate(%d, %v, %v, %f, %f) = %v, want %v",
 					tt.attempt, tt.initial, tt.max, tt.multiplier, tt.jitter, result, tt.expected)
 			}
 		})
@@ -90,7 +90,7 @@ func TestDecorrelatedJitterStrategy(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := strategy.Calculate(tt.attempt, tt.initial, tt.max, 2.0, 0.0)
 			if result < tt.minExpected || result > tt.maxExpected {
-				t.Errorf("Calculate(%d) = %v, want between %v and %v", 
+				t.Errorf("Calculate(%d) = %v, want between %v and %v",
 					tt.attempt, result, tt.minExpected, tt.maxExpected)
 			}
 		})
@@ -139,7 +139,7 @@ func TestPow(t *testing.T) {
 
 func BenchmarkExponentialJitterStrategy(b *testing.B) {
 	strategy := ExponentialJitterStrategy{}
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		strategy.Calculate(i%10, 100*time.Millisecond, 5*time.Second, 2.0, 0.1)
@@ -148,7 +148,7 @@ func BenchmarkExponentialJitterStrategy(b *testing.B) {
 
 func BenchmarkDecorrelatedJitterStrategy(b *testing.B) {
 	strategy := DecorrelatedJitterStrategy{}
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		strategy.Calculate(i%10, 100*time.Millisecond, 5*time.Second, 2.0, 0.1)

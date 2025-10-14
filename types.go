@@ -305,5 +305,3 @@ func (bs BackoffStrategy) String() string {
 		return "Unknown"
 	}
 }
-
-

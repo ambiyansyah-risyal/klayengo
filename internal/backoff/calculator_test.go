@@ -56,7 +56,7 @@ func TestGetDecorrelatedJitterCalculator(t *testing.T) {
 
 func BenchmarkCalculatorExponential(b *testing.B) {
 	calc := GetExponentialJitterCalculator()
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		calc.Calculate(i%10, 100*time.Millisecond, 5*time.Second, 2.0, 0.1)
@@ -65,7 +65,7 @@ func BenchmarkCalculatorExponential(b *testing.B) {
 
 func BenchmarkCalculatorDecorrelated(b *testing.B) {
 	calc := GetDecorrelatedJitterCalculator()
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		calc.Calculate(i%10, 100*time.Millisecond, 5*time.Second, 2.0, 0.1)

@@ -19,12 +19,12 @@ func TestNew(t *testing.T) {
 
 func TestDo(t *testing.T) {
 	g := New()
-	
+
 	// Test basic functionality
 	val, err := g.Do("key1", func() (interface{}, error) {
 		return "hello", nil
 	})
-	
+
 	if err != nil {
 		t.Errorf("Do() returned error: %v", err)
 	}
@@ -36,11 +36,11 @@ func TestDo(t *testing.T) {
 func TestDoError(t *testing.T) {
 	g := New()
 	expectedErr := errors.New("test error")
-	
+
 	val, err := g.Do("key1", func() (interface{}, error) {
 		return nil, expectedErr
 	})
-	
+
 	if err != expectedErr {
 		t.Errorf("Do() returned error %v, want %v", err, expectedErr)
 	}
@@ -51,10 +51,10 @@ func TestDoError(t *testing.T) {
 
 func TestDoDuplicateCalls(t *testing.T) {
 	g := New()
-	
+
 	var callCount int
 	var mu sync.Mutex
-	
+
 	// Function that increments call count
 	fn := func() (interface{}, error) {
 		mu.Lock()
@@ -63,13 +63,13 @@ func TestDoDuplicateCalls(t *testing.T) {
 		time.Sleep(10 * time.Millisecond) // Simulate work
 		return "result", nil
 	}
-	
+
 	// Start multiple goroutines calling the same key
 	const numCalls = 10
 	var wg sync.WaitGroup
 	results := make([]interface{}, numCalls)
 	errors := make([]error, numCalls)
-	
+
 	for i := 0; i < numCalls; i++ {
 		wg.Add(1)
 		go func(index int) {
@@ -77,16 +77,16 @@ func TestDoDuplicateCalls(t *testing.T) {
 			results[index], errors[index] = g.Do("same-key", fn)
 		}(i)
 	}
-	
+
 	wg.Wait()
-	
+
 	// Verify only called once
 	mu.Lock()
 	if callCount != 1 {
 		t.Errorf("Function called %d times, want 1", callCount)
 	}
 	mu.Unlock()
-	
+
 	// Verify all got the same result
 	for i, result := range results {
 		if errors[i] != nil {
@@ -100,12 +100,12 @@ func TestDoDuplicateCalls(t *testing.T) {
 
 func TestTryDo(t *testing.T) {
 	g := New()
-	
+
 	// First call should succeed
 	val, err, ok := g.TryDo("key1", func() (interface{}, error) {
 		return "hello", nil
 	})
-	
+
 	if !ok {
 		t.Error("TryDo() should have succeeded")
 	}
@@ -119,12 +119,12 @@ func TestTryDo(t *testing.T) {
 
 func TestTryDoInProgress(t *testing.T) {
 	g := New()
-	
+
 	var started sync.WaitGroup
 	var proceed sync.WaitGroup
 	started.Add(1)
 	proceed.Add(1)
-	
+
 	// Start a long-running operation
 	go func() {
 		g.TryDo("key1", func() (interface{}, error) {
@@ -133,14 +133,14 @@ func TestTryDoInProgress(t *testing.T) {
 			return "first", nil
 		})
 	}()
-	
+
 	started.Wait() // Wait for first call to start
-	
+
 	// Second call should return ErrInProgress
 	val, err, ok := g.TryDo("key1", func() (interface{}, error) {
 		return "second", nil
 	})
-	
+
 	if ok {
 		t.Error("TryDo() should have failed due to in-progress call")
 	}
@@ -150,28 +150,28 @@ func TestTryDoInProgress(t *testing.T) {
 	if val != nil {
 		t.Errorf("TryDo() returned %v, want nil", val)
 	}
-	
+
 	proceed.Done() // Allow first call to complete
 }
 
 func TestForgetKey(t *testing.T) {
 	g := New()
-	
+
 	// Add a key
 	g.Do("key1", func() (interface{}, error) {
 		return "value", nil
 	})
-	
+
 	// Forget the key
 	g.ForgetKey("key1")
-	
+
 	// The key should be gone from the map (though this is implementation detail)
 	// We can't directly test the map since it's private, but we can test behavior
 	// A new call should work normally
 	val, err := g.Do("key1", func() (interface{}, error) {
 		return "new-value", nil
 	})
-	
+
 	if err != nil {
 		t.Errorf("Do() after ForgetKey returned error: %v", err)
 	}
@@ -184,7 +184,7 @@ func TestErrInProgress(t *testing.T) {
 	if ErrInProgress == nil {
 		t.Error("ErrInProgress should not be nil")
 	}
-	
+
 	expected := "singleflight: call already in progress"
 	if ErrInProgress.Error() != expected {
 		t.Errorf("ErrInProgress.Error() = %q, want %q", ErrInProgress.Error(), expected)
@@ -193,7 +193,7 @@ func TestErrInProgress(t *testing.T) {
 
 func BenchmarkDo(b *testing.B) {
 	g := New()
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		g.Do("bench-key", func() (interface{}, error) {
@@ -204,7 +204,7 @@ func BenchmarkDo(b *testing.B) {
 
 func BenchmarkTryDo(b *testing.B) {
 	g := New()
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		g.TryDo("bench-key", func() (interface{}, error) {

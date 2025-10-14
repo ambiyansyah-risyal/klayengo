@@ -18,40 +18,40 @@ import (
 // rate limiting, caching, de‑duplication, middleware and metrics around
 // the standard net/http Client. It is safe for concurrent use.
 type Client struct {
-	httpClient        *http.Client
-	maxRetries        int
-	initialBackoff    time.Duration
-	maxBackoff        time.Duration
-	backoffMultiplier float64
-	jitter            float64
-	backoffStrategy   BackoffStrategy
-	backoffCalculator *internalbackoff.Calculator
-	timeout           time.Duration
-	retryCondition    RetryCondition
-	retryPolicy       RetryPolicy
-	retryBudget       *RetryBudget
-	circuitBreaker    *CircuitBreaker
-	middleware        []Middleware
-	rateLimiter       *RateLimiter
-	limiterRegistry   *RateLimiterRegistry
-	limiterKeyFunc    KeyFunc
-	cache             Cache
-	cacheTTL          time.Duration
-	cacheKeyFunc      func(*http.Request) string
-	cacheCondition    CacheCondition
-	cacheProvider     CacheProvider
-	cacheMode         CacheMode
-	singleFlight         map[string]*singleFlightEntry
-	singleFlightMu       sync.RWMutex
-	singleFlightGroup    *internalsingleflight.Group
-	singleFlightEnabled  bool
-	metrics           *MetricsCollector
-	debug             *DebugConfig
-	logger            Logger
-	deduplication     *DeduplicationTracker
-	dedupKeyFunc      DeduplicationKeyFunc
-	dedupCondition    DeduplicationCondition
-	validationError   error
+	httpClient          *http.Client
+	maxRetries          int
+	initialBackoff      time.Duration
+	maxBackoff          time.Duration
+	backoffMultiplier   float64
+	jitter              float64
+	backoffStrategy     BackoffStrategy
+	backoffCalculator   *internalbackoff.Calculator
+	timeout             time.Duration
+	retryCondition      RetryCondition
+	retryPolicy         RetryPolicy
+	retryBudget         *RetryBudget
+	circuitBreaker      *CircuitBreaker
+	middleware          []Middleware
+	rateLimiter         *RateLimiter
+	limiterRegistry     *RateLimiterRegistry
+	limiterKeyFunc      KeyFunc
+	cache               Cache
+	cacheTTL            time.Duration
+	cacheKeyFunc        func(*http.Request) string
+	cacheCondition      CacheCondition
+	cacheProvider       CacheProvider
+	cacheMode           CacheMode
+	singleFlight        map[string]*singleFlightEntry
+	singleFlightMu      sync.RWMutex
+	singleFlightGroup   *internalsingleflight.Group
+	singleFlightEnabled bool
+	metrics             *MetricsCollector
+	debug               *DebugConfig
+	logger              Logger
+	deduplication       *DeduplicationTracker
+	dedupKeyFunc        DeduplicationKeyFunc
+	dedupCondition      DeduplicationCondition
+	validationError     error
 }
 
 // New constructs a Client using the provided functional options. A best effort
@@ -93,7 +93,7 @@ func New(options ...Option) *Client {
 
 	// Initialize backoff calculator based on default strategy
 	client.backoffCalculator = internalbackoff.GetExponentialJitterCalculator()
-	
+
 	// Initialize singleflight group (disabled by default until cache SWR implementation)
 	client.singleFlightGroup = internalsingleflight.New()
 	client.singleFlightEnabled = false
@@ -583,10 +583,6 @@ func (c *Client) calculateDecorrelatedBackoff(attempt int) time.Duration {
 
 	return result
 }
-
-
-
-
 
 func DefaultRetryCondition(resp *http.Response, err error) bool {
 	if err != nil {
