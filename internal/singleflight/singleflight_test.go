@@ -127,7 +127,7 @@ func TestTryDoInProgress(t *testing.T) {
 
 	// Start a long-running operation
 	go func() {
-		g.TryDo("key1", func() (interface{}, error) {
+		_, _, _ = g.TryDo("key1", func() (interface{}, error) {
 			started.Done()
 			proceed.Wait() // Wait for test to proceed
 			return "first", nil
@@ -158,7 +158,7 @@ func TestForgetKey(t *testing.T) {
 	g := New()
 
 	// Add a key
-	g.Do("key1", func() (interface{}, error) {
+	_, _ = g.Do("key1", func() (interface{}, error) {
 		return "value", nil
 	})
 
@@ -196,7 +196,7 @@ func BenchmarkDo(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		g.Do("bench-key", func() (interface{}, error) {
+		_, _ = g.Do("bench-key", func() (interface{}, error) {
 			return "result", nil
 		})
 	}
@@ -207,7 +207,7 @@ func BenchmarkTryDo(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		g.TryDo("bench-key", func() (interface{}, error) {
+		_, _, _ = g.TryDo("bench-key", func() (interface{}, error) {
 			return "result", nil
 		})
 	}

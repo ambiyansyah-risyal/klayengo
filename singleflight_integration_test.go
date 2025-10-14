@@ -54,7 +54,7 @@ func TestClientSingleFlightDoWithNewImplementation(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			client.singleFlightDo("test-key", fn)
+			_, _ = client.singleFlightDo("test-key", fn)
 		}()
 	}
 
@@ -86,7 +86,7 @@ func TestClientSingleFlightDoWithLegacyImplementation(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			client.singleFlightDo("test-key", fn)
+			_, _ = client.singleFlightDo("test-key", fn)
 		}()
 	}
 
@@ -107,7 +107,7 @@ func BenchmarkSingleFlightDoNew(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		client.singleFlightDo("bench-key", fn)
+		_, _ = client.singleFlightDo("bench-key", fn)
 	}
 }
 
@@ -120,6 +120,6 @@ func BenchmarkSingleFlightDoLegacy(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		client.singleFlightDo("bench-key", fn)
+		_, _ = client.singleFlightDo("bench-key", fn)
 	}
 }
