@@ -75,6 +75,7 @@ func NewOptimizedRateLimiter(maxTokens int, refillRate time.Duration) *Optimized
 
 // Allow reports whether a token is available and consumes it atomically.
 // This is the hot path optimized for maximum throughput.
+//
 //go:noinline
 func (rl *OptimizedRateLimiter) Allow() bool {
 	// Fast refill check and token consumption in single operation
@@ -110,6 +111,7 @@ func (rl *OptimizedRateLimiter) AllowN(n int64) bool {
 
 // fastRefill optimizes token refill with minimal atomic operations.
 // Uses batched refill strategy to reduce contention.
+//
 //go:noinline
 func (rl *OptimizedRateLimiter) fastRefill() {
 	now := time.Now().UnixNano()
@@ -163,6 +165,7 @@ func (rl *OptimizedRateLimiter) fastRefill() {
 }
 
 // consumeTokenFast optimizes single token consumption with minimal retries.
+//
 //go:noinline
 func (rl *OptimizedRateLimiter) consumeTokenFast() bool {
 	// Optimized CAS loop with early exit

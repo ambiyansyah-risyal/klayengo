@@ -64,6 +64,7 @@ func NewOptimizedCircuitBreaker(config CircuitBreakerConfig) *OptimizedCircuitBr
 
 // Allow reports if a request is permitted under current breaker state.
 // This is the hot path optimized for zero allocations and minimal branching.
+//
 //go:noinline
 func (cb *OptimizedCircuitBreaker) Allow() bool {
 	// Fast path: read state with single atomic load
@@ -99,6 +100,7 @@ func (cb *OptimizedCircuitBreaker) Allow() bool {
 
 // RecordFailure increments failure counters with optimized state transitions.
 // Uses lock-free atomic operations for all state updates.
+//
 //go:noinline
 func (cb *OptimizedCircuitBreaker) RecordFailure() {
 	now := time.Now().UnixNano()
@@ -131,6 +133,7 @@ func (cb *OptimizedCircuitBreaker) RecordFailure() {
 }
 
 // RecordSuccess increments success count with optimized half-open to closed transition.
+//
 //go:noinline
 func (cb *OptimizedCircuitBreaker) RecordSuccess() {
 	currentState := atomic.LoadInt64(&cb.state)
