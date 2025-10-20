@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	backoff "github.com/ambiyansyah-risyal/klayengo/internal/backoff"
+	internalbackoff "github.com/ambiyansyah-risyal/klayengo/internal/backoff"
 )
 
 // RetryCondition returns true if the operation should be retried.
