@@ -8,7 +8,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-	"unsafe"
 )
 
 const (
@@ -264,7 +263,8 @@ func (c *OptimizedCache) Clear() {
 // getShard returns the shard for a given key using optimized hashing
 func (c *OptimizedCache) getShard(key string) *optimizedCacheShard {
 	hash := fnv.New64a()
-	hash.Write(unsafe.Slice(unsafe.StringData(key), len(key)))
+	// Use byte slice conversion for better compatibility
+	hash.Write([]byte(key))
 	return c.shards[hash.Sum64()&uint64(c.shardMask)]
 }
 

@@ -64,12 +64,12 @@ run_check() {
     
     if eval "${command}" > "${output_file}" 2>&1; then
         local end_check_time=$(date +%s.%N)
-        local duration=$(echo "${end_check_time} - ${start_check_time}" | bc -l)
+        local duration=$(awk "BEGIN {printf \"%.2f\", ${end_check_time} - ${start_check_time}}")
         printf "✅ %-20s (%.2fs)\n" "${name}" "${duration}" | tee -a "${LOG_FILE}"
         echo "0" > "${TEMP_DIR}/${name}.status"
     else
         local end_check_time=$(date +%s.%N)
-        local duration=$(echo "${end_check_time} - ${start_check_time}" | bc -l)
+        local duration=$(awk "BEGIN {printf \"%.2f\", ${end_check_time} - ${start_check_time}}")
         printf "❌ %-20s (%.2fs)\n" "${name}" "${duration}" | tee -a "${LOG_FILE}"
         echo "1" > "${TEMP_DIR}/${name}.status"
         
@@ -220,7 +220,7 @@ done
 
 # Performance summary
 end_time=$(date +%s.%N)
-total_duration=$(echo "${end_time} - ${start_time}" | bc -l)
+total_duration=$(awk "BEGIN {printf \"%.2f\", ${end_time} - ${start_time}}")
 
 echo ""
 echo "⏱️  Performance Summary:"

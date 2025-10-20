@@ -1,6 +1,7 @@
 package klayengo
 
 import (
+	"runtime"
 	"sync/atomic"
 	"time"
 	"unsafe"
@@ -117,12 +118,14 @@ func (rl *OptimizedRateLimiter) fastRefill() {
 	elapsed := now - lastRefill
 	
 	// Quick exit if not enough time passed for refill
-	if elapsed < rl.refillThreshold {
+	threshold := atomic.LoadInt64(&rl.refillThreshold)
+	if elapsed < threshold {
 		return
 	}
 	
 	// Calculate tokens to add based on elapsed time
-	tokensToAdd := elapsed / rl.refillRate
+	refillRate := atomic.LoadInt64(&rl.refillRate)
+	tokensToAdd := elapsed / refillRate
 	if tokensToAdd == 0 {
 		return
 	}
@@ -134,7 +137,7 @@ func (rl *OptimizedRateLimiter) fastRefill() {
 	}
 	
 	// Try to update last refill timestamp first to prevent races
-	newRefillTime := lastRefill + (tokensToAdd * rl.refillRate)
+	newRefillTime := lastRefill + (tokensToAdd * refillRate)
 	if !atomic.CompareAndSwapInt64(&rl.lastRefill, lastRefill, newRefillTime) {
 		return // Another goroutine updated, skip this refill
 	}
@@ -172,9 +175,9 @@ func (rl *OptimizedRateLimiter) consumeTokenFast() bool {
 		if atomic.CompareAndSwapInt64(&rl.tokens, current, current-1) {
 			return true
 		}
-		// Brief pause to reduce contention on high load
+		// Brief yield to reduce contention on high load
 		if attempts > 0 {
-			time.Sleep(1) // 1 nanosecond pause
+			runtime.Gosched() // Yield CPU to other goroutines
 		}
 	}
 	return false // failed after retries
@@ -194,7 +197,7 @@ func (rl *OptimizedRateLimiter) Reserve() time.Time {
 	}
 	
 	// Calculate wait time for next token
-	waitTime := time.Duration(rl.refillRate)
+	waitTime := time.Duration(atomic.LoadInt64(&rl.refillRate))
 	return time.Now().Add(waitTime)
 }
 
@@ -208,7 +211,7 @@ func (rl *OptimizedRateLimiter) GetStats() RateLimiterStats {
 		lastRefill = time.Unix(0, lastRefillNano)
 	}
 	
-	tokensPerSecond := float64(time.Second) / float64(rl.refillRate)
+	tokensPerSecond := float64(time.Second) / float64(atomic.LoadInt64(&rl.refillRate))
 	utilization := float64(current) / float64(rl.maxTokens)
 	
 	return RateLimiterStats{
@@ -233,9 +236,8 @@ func (rl *OptimizedRateLimiter) SetRate(newRate time.Duration) {
 		newRefillRate = 1
 	}
 	
+	// Update both fields atomically for consistency
 	atomic.StoreInt64(&rl.refillRate, newRefillRate)
-	
-	// Update threshold as well
 	atomic.StoreInt64(&rl.refillThreshold, newRefillRate)
 }
 
