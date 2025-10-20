@@ -1,6 +1,7 @@
 package klayengo
 
 import (
+	"context"
 	"net/http"
 	"sync"
 	"testing"
@@ -444,10 +445,10 @@ func TestOptimizedCacheProvider(t *testing.T) {
 		resp.Header.Set("Content-Type", "application/json")
 
 		// Set through provider
-		provider.Set(nil, "provider_key", resp, time.Hour)
+		provider.Set(context.TODO(), "provider_key", resp, time.Hour)
 
 		// Get through provider
-		retrieved, found := provider.Get(nil, "provider_key")
+		retrieved, found := provider.Get(context.TODO(), "provider_key")
 		if !found {
 			t.Error("Should find entry through provider interface")
 		}
@@ -457,9 +458,9 @@ func TestOptimizedCacheProvider(t *testing.T) {
 		}
 
 		// Invalidate
-		provider.Invalidate(nil, "provider_key")
+		provider.Invalidate(context.TODO(), "provider_key")
 
-		_, found = provider.Get(nil, "provider_key")
+		_, found = provider.Get(context.TODO(), "provider_key")
 		if found {
 			t.Error("Should not find entry after invalidation")
 		}

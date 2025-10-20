@@ -36,7 +36,7 @@ type OptimizedCache struct {
 // optimizedCacheShard represents a single cache shard with optimized locking
 type optimizedCacheShard struct {
 	// Cache line aligned to prevent false sharing
-	_pad0 [CacheLineSize]byte
+	_pad0 [CacheLineSize]byte //nolint:unused // padding for cache line alignment
 
 	// Hot path data - grouped for cache locality
 	store map[string]*optimizedCacheEntry
@@ -52,7 +52,7 @@ type optimizedCacheShard struct {
 	size      int64
 	maxSize   int64
 
-	_pad1 [CacheLineSize]byte
+	_pad1 [CacheLineSize]byte //nolint:unused // padding for cache line alignment
 }
 
 // optimizedCacheEntry with LRU tracking and atomic access counters
