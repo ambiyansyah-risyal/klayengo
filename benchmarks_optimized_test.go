@@ -105,7 +105,7 @@ func BenchmarkRateLimiterHighContention(b *testing.B) {
 		rl := NewRateLimiter(10000, time.Second)
 		var wg sync.WaitGroup
 		operations := int64(b.N)
-		
+
 		b.ResetTimer()
 		for i := 0; i < numGoroutines; i++ {
 			wg.Add(1)
@@ -123,7 +123,7 @@ func BenchmarkRateLimiterHighContention(b *testing.B) {
 		rl := NewOptimizedRateLimiter(10000, time.Second)
 		var wg sync.WaitGroup
 		operations := int64(b.N)
-		
+
 		b.ResetTimer()
 		for i := 0; i < numGoroutines; i++ {
 			wg.Add(1)
@@ -155,7 +155,7 @@ func BenchmarkCacheComparison(b *testing.B) {
 			key := fmt.Sprintf("key_%d", i)
 			cache.Set(key, entry, time.Hour)
 		}
-		
+
 		b.ResetTimer()
 		b.RunParallel(func(pb *testing.PB) {
 			i := 0
@@ -174,7 +174,7 @@ func BenchmarkCacheComparison(b *testing.B) {
 			key := fmt.Sprintf("key_%d", i)
 			cache.Set(key, entry, time.Hour)
 		}
-		
+
 		b.ResetTimer()
 		b.RunParallel(func(pb *testing.PB) {
 			i := 0
@@ -198,13 +198,13 @@ func BenchmarkCacheContention(b *testing.B) {
 	b.Run("Original_Mixed_Operations", func(b *testing.B) {
 		cache := NewInMemoryCache()
 		var counter int64
-		
+
 		b.ResetTimer()
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
 				i := atomic.AddInt64(&counter, 1)
 				key := fmt.Sprintf("key_%d", i%100)
-				
+
 				if i%4 == 0 {
 					// 25% writes
 					cache.Set(key, entry, time.Hour)
@@ -219,13 +219,13 @@ func BenchmarkCacheContention(b *testing.B) {
 	b.Run("Optimized_Mixed_Operations", func(b *testing.B) {
 		cache := NewOptimizedCache()
 		var counter int64
-		
+
 		b.ResetTimer()
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
 				i := atomic.AddInt64(&counter, 1)
 				key := fmt.Sprintf("key_%d", i%100)
-				
+
 				if i%4 == 0 {
 					// 25% writes
 					cache.Set(key, entry, time.Hour)
@@ -246,17 +246,17 @@ func BenchmarkMemoryFootprint(b *testing.B) {
 			RecoveryTimeout:  30 * time.Second,
 			SuccessThreshold: 2,
 		}
-		
+
 		var originalSize, optimizedSize uintptr
-		
+
 		// Original circuit breaker
 		original := NewCircuitBreaker(config)
 		originalSize = original.MemoryFootprint()
-		
-		// Optimized circuit breaker  
+
+		// Optimized circuit breaker
 		optimized := NewOptimizedCircuitBreaker(config)
 		optimizedSize = optimized.MemoryFootprint()
-		
+
 		b.ReportMetric(float64(originalSize), "original_bytes")
 		b.ReportMetric(float64(optimizedSize), "optimized_bytes")
 		b.ReportMetric(float64(originalSize)/float64(optimizedSize), "size_ratio")
@@ -266,11 +266,11 @@ func BenchmarkMemoryFootprint(b *testing.B) {
 		// Original rate limiter
 		original := NewRateLimiter(1000, time.Second)
 		originalSize := original.MemoryFootprint()
-		
+
 		// Optimized rate limiter
 		optimized := NewOptimizedRateLimiter(1000, time.Second)
 		optimizedSize := optimized.MemoryFootprint()
-		
+
 		b.ReportMetric(float64(originalSize), "original_bytes")
 		b.ReportMetric(float64(optimizedSize), "optimized_bytes")
 		b.ReportMetric(float64(originalSize)/float64(optimizedSize), "size_ratio")
@@ -280,7 +280,7 @@ func BenchmarkMemoryFootprint(b *testing.B) {
 // BenchmarkConcurrentAccess tests performance under high concurrent access
 func BenchmarkConcurrentAccess(b *testing.B) {
 	numWorkers := runtime.NumCPU() * 2
-	
+
 	b.Run("Original_Components", func(b *testing.B) {
 		cb := NewCircuitBreaker(CircuitBreakerConfig{
 			FailureThreshold: 10,
@@ -289,10 +289,10 @@ func BenchmarkConcurrentAccess(b *testing.B) {
 		})
 		rl := NewRateLimiter(10000, time.Second)
 		cache := NewInMemoryCache()
-		
+
 		var wg sync.WaitGroup
 		operations := int64(b.N)
-		
+
 		b.ResetTimer()
 		for i := 0; i < numWorkers; i++ {
 			wg.Add(1)
@@ -303,16 +303,16 @@ func BenchmarkConcurrentAccess(b *testing.B) {
 					StatusCode: 200,
 					Header:     make(http.Header),
 				}
-				
+
 				for atomic.AddInt64(&operations, -1) > 0 {
 					// Circuit breaker operations
 					if cb.Allow() {
 						cb.RecordSuccess()
 					}
-					
+
 					// Rate limiter operations
 					rl.Allow()
-					
+
 					// Cache operations
 					key := fmt.Sprintf("key_%d", workerID)
 					cache.Set(key, entry, time.Hour)
@@ -322,7 +322,7 @@ func BenchmarkConcurrentAccess(b *testing.B) {
 		}
 		wg.Wait()
 	})
-	
+
 	b.Run("Optimized_Components", func(b *testing.B) {
 		cb := NewOptimizedCircuitBreaker(CircuitBreakerConfig{
 			FailureThreshold: 10,
@@ -331,10 +331,10 @@ func BenchmarkConcurrentAccess(b *testing.B) {
 		})
 		rl := NewOptimizedRateLimiter(10000, time.Second)
 		cache := NewOptimizedCache()
-		
+
 		var wg sync.WaitGroup
 		operations := int64(b.N)
-		
+
 		b.ResetTimer()
 		for i := 0; i < numWorkers; i++ {
 			wg.Add(1)
@@ -345,16 +345,16 @@ func BenchmarkConcurrentAccess(b *testing.B) {
 					StatusCode: 200,
 					Header:     make(http.Header),
 				}
-				
+
 				for atomic.AddInt64(&operations, -1) > 0 {
 					// Circuit breaker operations
 					if cb.Allow() {
 						cb.RecordSuccess()
 					}
-					
+
 					// Rate limiter operations
 					rl.Allow()
-					
+
 					// Cache operations
 					key := fmt.Sprintf("key_%d", workerID)
 					cache.Set(key, entry, time.Hour)
@@ -372,18 +372,18 @@ func BenchmarkThroughputComparison(b *testing.B) {
 		// Setup original components
 		cb := NewCircuitBreaker(CircuitBreakerConfig{
 			FailureThreshold: 10,
-			RecoveryTimeout:  30 * time.Second,  
+			RecoveryTimeout:  30 * time.Second,
 			SuccessThreshold: 3,
 		})
 		rl := NewRateLimiter(1000, time.Second)
 		cache := NewInMemoryCache()
-		
+
 		entry := &CacheEntry{
 			Body:       []byte("benchmark response body"),
 			StatusCode: 200,
 			Header:     make(http.Header),
 		}
-		
+
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
 			// Simulate full request pipeline
@@ -398,7 +398,7 @@ func BenchmarkThroughputComparison(b *testing.B) {
 			}
 		}
 	})
-	
+
 	b.Run("Optimized_System_Throughput", func(b *testing.B) {
 		// Setup optimized components
 		cb := NewOptimizedCircuitBreaker(CircuitBreakerConfig{
@@ -408,13 +408,13 @@ func BenchmarkThroughputComparison(b *testing.B) {
 		})
 		rl := NewOptimizedRateLimiter(1000, time.Second)
 		cache := NewOptimizedCache()
-		
+
 		entry := &CacheEntry{
 			Body:       []byte("benchmark response body"),
 			StatusCode: 200,
 			Header:     make(http.Header),
 		}
-		
+
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
 			// Simulate full request pipeline
@@ -437,7 +437,7 @@ func (cb *CircuitBreaker) MemoryFootprint() uintptr {
 }
 
 func (rl *RateLimiter) MemoryFootprint() uintptr {
-	return 32 // Approximate size of RateLimiter struct  
+	return 32 // Approximate size of RateLimiter struct
 }
 
 // BenchmarkAllocationProfile measures memory allocations
@@ -449,7 +449,7 @@ func BenchmarkAllocationProfile(b *testing.B) {
 			SuccessThreshold: 2,
 		})
 		rl := NewRateLimiter(1000, time.Second)
-		
+
 		b.ReportAllocs()
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
@@ -457,7 +457,7 @@ func BenchmarkAllocationProfile(b *testing.B) {
 			rl.Allow()
 		}
 	})
-	
+
 	b.Run("Optimized_Zero_Alloc_Path", func(b *testing.B) {
 		cb := NewOptimizedCircuitBreaker(CircuitBreakerConfig{
 			FailureThreshold: 5,
@@ -465,7 +465,7 @@ func BenchmarkAllocationProfile(b *testing.B) {
 			SuccessThreshold: 2,
 		})
 		rl := NewOptimizedRateLimiter(1000, time.Second)
-		
+
 		b.ReportAllocs()
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {

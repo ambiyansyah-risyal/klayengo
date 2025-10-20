@@ -28,11 +28,11 @@ type OptimizedCircuitBreaker struct {
 
 // CircuitBreakerStats provides performance metrics without allocation
 type CircuitBreakerStats struct {
-	State        CircuitState
-	Failures     int64
-	Successes    int64
-	LastFailure  time.Time
-	IsRecovered  bool
+	State         CircuitState
+	Failures      int64
+	Successes     int64
+	LastFailure   time.Time
+	IsRecovered   bool
 	TimeToRecover time.Duration
 }
 
@@ -54,11 +54,11 @@ func NewOptimizedCircuitBreaker(config CircuitBreakerConfig) *OptimizedCircuitBr
 		failureThreshold: int64(config.FailureThreshold),
 		recoveryTimeout:  int64(config.RecoveryTimeout),
 		successThreshold: int64(config.SuccessThreshold),
-		state:           int64(StateClosed),
-		failures:        0,
-		lastFailure:     0,
-		successes:       0,
-		stateMask:       0,
+		state:            int64(StateClosed),
+		failures:         0,
+		lastFailure:      0,
+		successes:        0,
+		stateMask:        0,
 	}
 }
 
@@ -68,7 +68,7 @@ func NewOptimizedCircuitBreaker(config CircuitBreakerConfig) *OptimizedCircuitBr
 func (cb *OptimizedCircuitBreaker) Allow() bool {
 	// Fast path: read state with single atomic load
 	currentState := atomic.LoadInt64(&cb.state)
-	
+
 	// Optimized state check using computed jumps instead of switch
 	switch CircuitState(currentState) {
 	case StateClosed:
@@ -77,7 +77,7 @@ func (cb *OptimizedCircuitBreaker) Allow() bool {
 		// Fast path: check recovery without allocation
 		now := time.Now().UnixNano()
 		lastFail := atomic.LoadInt64(&cb.lastFailure)
-		
+
 		// Single comparison for recovery check
 		if now-lastFail >= cb.recoveryTimeout {
 			// Try to transition to half-open using CAS
@@ -92,23 +92,23 @@ func (cb *OptimizedCircuitBreaker) Allow() bool {
 	case StateHalfOpen:
 		return true
 	}
-	
+
 	// Should never reach here, but return safe default
 	return false
 }
 
 // RecordFailure increments failure counters with optimized state transitions.
 // Uses lock-free atomic operations for all state updates.
-//go:noinline 
+//go:noinline
 func (cb *OptimizedCircuitBreaker) RecordFailure() {
 	now := time.Now().UnixNano()
-	
+
 	// Always update last failure timestamp
 	atomic.StoreInt64(&cb.lastFailure, now)
-	
+
 	// Read current state once
 	currentState := atomic.LoadInt64(&cb.state)
-	
+
 	switch CircuitState(currentState) {
 	case StateClosed:
 		// Increment failures and check threshold
@@ -117,11 +117,11 @@ func (cb *OptimizedCircuitBreaker) RecordFailure() {
 			// Transition to open state
 			atomic.CompareAndSwapInt64(&cb.state, int64(StateClosed), int64(StateOpen))
 		}
-		
+
 	case StateOpen:
 		// Already open, just increment counter for metrics
 		atomic.AddInt64(&cb.failures, 1)
-		
+
 	case StateHalfOpen:
 		// Reset successes and transition back to open
 		atomic.StoreInt64(&cb.successes, 0)
@@ -134,7 +134,7 @@ func (cb *OptimizedCircuitBreaker) RecordFailure() {
 //go:noinline
 func (cb *OptimizedCircuitBreaker) RecordSuccess() {
 	currentState := atomic.LoadInt64(&cb.state)
-	
+
 	// Only half-open state cares about successes
 	if CircuitState(currentState) == StateHalfOpen {
 		newSuccesses := atomic.AddInt64(&cb.successes, 1)
@@ -157,11 +157,11 @@ func (cb *OptimizedCircuitBreaker) GetStats() CircuitBreakerStats {
 	failures := atomic.LoadInt64(&cb.failures)
 	successes := atomic.LoadInt64(&cb.successes)
 	lastFailNano := atomic.LoadInt64(&cb.lastFailure)
-	
+
 	var lastFailure time.Time
 	var timeToRecover time.Duration
 	isRecovered := false
-	
+
 	if lastFailNano > 0 {
 		lastFailure = time.Unix(0, lastFailNano)
 		if state == StateOpen {
@@ -173,7 +173,7 @@ func (cb *OptimizedCircuitBreaker) GetStats() CircuitBreakerStats {
 			}
 		}
 	}
-	
+
 	return CircuitBreakerStats{
 		State:         state,
 		Failures:      failures,

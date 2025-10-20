@@ -25,11 +25,11 @@ type OptimizedCache struct {
 	shards    []*optimizedCacheShard
 	numShards int64
 	shardMask int64 // optimization for modulo operation
-	
+
 	// Global statistics - lock-free counters
-	totalHits   int64
-	totalMisses int64
-	totalSets   int64
+	totalHits      int64
+	totalMisses    int64
+	totalSets      int64
 	totalEvictions int64
 }
 
@@ -37,21 +37,21 @@ type OptimizedCache struct {
 type optimizedCacheShard struct {
 	// Cache line aligned to prevent false sharing
 	_pad0 [CacheLineSize]byte
-	
+
 	// Hot path data - grouped for cache locality
 	store map[string]*optimizedCacheEntry
 	mu    sync.RWMutex
-	
+
 	// LRU tracking for efficient eviction
 	head, tail *optimizedCacheEntry
-	
+
 	// Shard-level statistics
-	hits       int64
-	misses     int64
-	evictions  int64
-	size       int64
-	maxSize    int64
-	
+	hits      int64
+	misses    int64
+	evictions int64
+	size      int64
+	maxSize   int64
+
 	_pad1 [CacheLineSize]byte
 }
 
@@ -63,21 +63,21 @@ type optimizedCacheEntry struct {
 	body      []byte
 	header    http.Header
 	expiresAt int64 // nanoseconds for faster comparison
-	
+
 	// HTTP cache semantics
 	etag         string
 	lastModified *time.Time
 	maxAge       *time.Duration
 	staleAt      int64 // nanoseconds
 	isStale      int32 // atomic boolean
-	
+
 	// LRU chain pointers
 	prev, next *optimizedCacheEntry
-	
+
 	// Performance tracking - atomic counters
 	accessCount int64
 	lastAccess  int64 // nanoseconds
-	
+
 	// Hot data promotion
 	hotPromoted int32 // atomic boolean
 }
@@ -95,10 +95,10 @@ func NewOptimizedCacheWithSize(shardCount, maxSizePerShard int) *OptimizedCache 
 	if maxSizePerShard <= 0 {
 		maxSizePerShard = 1000
 	}
-	
+
 	// Ensure shard count is power of 2 for efficient masking
 	shardCount = nextPowerOf2(shardCount)
-	
+
 	shards := make([]*optimizedCacheShard, shardCount)
 	for i := range shards {
 		shards[i] = &optimizedCacheShard{
@@ -106,7 +106,7 @@ func NewOptimizedCacheWithSize(shardCount, maxSizePerShard int) *OptimizedCache 
 			maxSize: int64(maxSizePerShard),
 		}
 	}
-	
+
 	return &OptimizedCache{
 		shards:    shards,
 		numShards: int64(shardCount),
@@ -117,7 +117,7 @@ func NewOptimizedCacheWithSize(shardCount, maxSizePerShard int) *OptimizedCache 
 // Get retrieves an entry with hot path optimization and LRU promotion
 func (c *OptimizedCache) Get(key string) (*CacheEntry, bool) {
 	shard := c.getShard(key)
-	
+
 	// Fast path: try read lock first
 	shard.mu.RLock()
 	entry := shard.store[key]
@@ -127,7 +127,7 @@ func (c *OptimizedCache) Get(key string) (*CacheEntry, bool) {
 		atomic.AddInt64(&c.totalMisses, 1)
 		return nil, false
 	}
-	
+
 	// Quick expiration check
 	now := time.Now().UnixNano()
 	if now > entry.expiresAt {
@@ -137,22 +137,22 @@ func (c *OptimizedCache) Get(key string) (*CacheEntry, bool) {
 		delete(shard.store, key)
 		c.removeLRU(shard, entry)
 		shard.mu.Unlock()
-		
+
 		atomic.AddInt64(&shard.misses, 1)
 		atomic.AddInt64(&c.totalMisses, 1)
 		return nil, false
 	}
-	
+
 	// Update access statistics atomically
 	atomic.AddInt64(&entry.accessCount, 1)
 	atomic.StoreInt64(&entry.lastAccess, now)
-	
+
 	// Create response copy while holding read lock - minimize allocations
 	statusCode := 200 // default
 	if entry.response != nil {
 		statusCode = entry.response.StatusCode
 	}
-	
+
 	// Pre-allocate to avoid multiple allocations
 	cacheEntry := &CacheEntry{
 		Body:         entry.body, // Share byte slice (read-only)
@@ -164,14 +164,14 @@ func (c *OptimizedCache) Get(key string) (*CacheEntry, bool) {
 		MaxAge:       entry.maxAge,
 		IsStale:      atomic.LoadInt32(&entry.isStale) == 1,
 	}
-	
+
 	shard.mu.RUnlock()
-	
+
 	// Hot data promotion - move frequently accessed items to front
 	if atomic.LoadInt64(&entry.accessCount)%10 == 0 { // promote every 10th access
 		c.promoteHotEntry(shard, entry)
 	}
-	
+
 	atomic.AddInt64(&shard.hits, 1)
 	atomic.AddInt64(&c.totalHits, 1)
 	return cacheEntry, true
@@ -181,7 +181,7 @@ func (c *OptimizedCache) Get(key string) (*CacheEntry, bool) {
 func (c *OptimizedCache) Set(key string, entry *CacheEntry, ttl time.Duration) {
 	shard := c.getShard(key)
 	now := time.Now()
-	
+
 	optimizedEntry := &optimizedCacheEntry{
 		key:          key,
 		body:         entry.Body,
@@ -194,7 +194,7 @@ func (c *OptimizedCache) Set(key string, entry *CacheEntry, ttl time.Duration) {
 		accessCount:  1,
 		response:     entry.Response, // Store the response
 	}
-	
+
 	// If no response provided, create a minimal one for StatusCode
 	if optimizedEntry.response == nil {
 		optimizedEntry.response = &http.Response{
@@ -202,30 +202,30 @@ func (c *OptimizedCache) Set(key string, entry *CacheEntry, ttl time.Duration) {
 			Header:     entry.Header,
 		}
 	}
-	
+
 	if entry.StaleAt != nil {
 		optimizedEntry.staleAt = entry.StaleAt.UnixNano()
 	}
-	
+
 	shard.mu.Lock()
 	defer shard.mu.Unlock()
-	
+
 	// Check if we need to evict old entries
 	if shard.size >= int64(float64(shard.maxSize)*EvictionThreshold) {
 		c.evictLRU(shard)
 	}
-	
+
 	// Remove existing entry if present
 	if existing := shard.store[key]; existing != nil {
 		c.removeLRU(shard, existing)
 		shard.size--
 	}
-	
+
 	// Add new entry
 	shard.store[key] = optimizedEntry
 	c.addToLRU(shard, optimizedEntry)
 	shard.size++
-	
+
 	atomic.AddInt64(&c.totalSets, 1)
 }
 
@@ -234,7 +234,7 @@ func (c *OptimizedCache) Delete(key string) {
 	shard := c.getShard(key)
 	shard.mu.Lock()
 	defer shard.mu.Unlock()
-	
+
 	if entry := shard.store[key]; entry != nil {
 		delete(shard.store, key)
 		c.removeLRU(shard, entry)
@@ -252,7 +252,7 @@ func (c *OptimizedCache) Clear() {
 		shard.size = 0
 		shard.mu.Unlock()
 	}
-	
+
 	// Reset global counters
 	atomic.StoreInt64(&c.totalHits, 0)
 	atomic.StoreInt64(&c.totalMisses, 0)
@@ -276,7 +276,7 @@ func (c *OptimizedCache) addToLRU(shard *optimizedCacheShard, entry *optimizedCa
 		shard.tail = entry
 		return
 	}
-	
+
 	entry.next = shard.head
 	shard.head.prev = entry
 	shard.head = entry
@@ -288,13 +288,13 @@ func (c *OptimizedCache) removeLRU(shard *optimizedCacheShard, entry *optimizedC
 	} else {
 		shard.head = entry.next
 	}
-	
+
 	if entry.next != nil {
 		entry.next.prev = entry.prev
 	} else {
 		shard.tail = entry.prev
 	}
-	
+
 	entry.prev = nil
 	entry.next = nil
 }
@@ -314,12 +314,12 @@ func (c *OptimizedCache) evictLRU(shard *optimizedCacheShard) {
 	if shard.tail == nil {
 		return
 	}
-	
+
 	evicted := shard.tail
 	delete(shard.store, evicted.key)
 	c.removeLRU(shard, evicted)
 	shard.size--
-	
+
 	atomic.AddInt64(&shard.evictions, 1)
 	atomic.AddInt64(&c.totalEvictions, 1)
 }
@@ -329,7 +329,7 @@ func (c *OptimizedCache) GetStats() CacheStats {
 	totalSize := int64(0)
 	totalCapacity := int64(0)
 	shardStats := make([]ShardStats, len(c.shards))
-	
+
 	for i, shard := range c.shards {
 		shard.mu.RLock()
 		size := shard.size
@@ -338,10 +338,10 @@ func (c *OptimizedCache) GetStats() CacheStats {
 		misses := atomic.LoadInt64(&shard.misses)
 		evictions := atomic.LoadInt64(&shard.evictions)
 		shard.mu.RUnlock()
-		
+
 		totalSize += size
 		totalCapacity += capacity
-		
+
 		shardStats[i] = ShardStats{
 			Size:      size,
 			Capacity:  capacity,
@@ -350,24 +350,24 @@ func (c *OptimizedCache) GetStats() CacheStats {
 			Evictions: evictions,
 		}
 	}
-	
+
 	totalHits := atomic.LoadInt64(&c.totalHits)
 	totalMisses := atomic.LoadInt64(&c.totalMisses)
 	hitRatio := float64(0)
 	if totalHits+totalMisses > 0 {
 		hitRatio = float64(totalHits) / float64(totalHits+totalMisses)
 	}
-	
+
 	return CacheStats{
-		TotalSize:     totalSize,
-		TotalCapacity: totalCapacity,
-		TotalHits:     totalHits,
-		TotalMisses:   totalMisses,
-		TotalSets:     atomic.LoadInt64(&c.totalSets),
+		TotalSize:      totalSize,
+		TotalCapacity:  totalCapacity,
+		TotalHits:      totalHits,
+		TotalMisses:    totalMisses,
+		TotalSets:      atomic.LoadInt64(&c.totalSets),
 		TotalEvictions: atomic.LoadInt64(&c.totalEvictions),
-		HitRatio:      hitRatio,
-		ShardCount:    int64(len(c.shards)),
-		ShardStats:    shardStats,
+		HitRatio:       hitRatio,
+		ShardCount:     int64(len(c.shards)),
+		ShardStats:     shardStats,
 	}
 }
 
@@ -412,15 +412,15 @@ func nextPowerOf2(n int) int {
 // Implement CacheProvider interface for backwards compatibility
 
 type OptimizedCacheProvider struct {
-	cache *OptimizedCache
-	mode  CacheMode
+	cache      *OptimizedCache
+	mode       CacheMode
 	defaultTTL time.Duration
 }
 
 func NewOptimizedCacheProvider(cache *OptimizedCache, defaultTTL time.Duration, mode CacheMode) *OptimizedCacheProvider {
 	return &OptimizedCacheProvider{
-		cache: cache,
-		mode:  mode,
+		cache:      cache,
+		mode:       mode,
 		defaultTTL: defaultTTL,
 	}
 }
@@ -430,14 +430,14 @@ func (p *OptimizedCacheProvider) Get(ctx context.Context, key string) (*http.Res
 	if !ok {
 		return nil, false
 	}
-	
+
 	// Convert back to http.Response (this could be optimized further)
 	resp := &http.Response{
 		StatusCode: entry.StatusCode,
 		Header:     entry.Header,
 		Body:       nil, // Body will be set by caller
 	}
-	
+
 	return resp, true
 }
 
@@ -445,13 +445,13 @@ func (p *OptimizedCacheProvider) Set(ctx context.Context, key string, resp *http
 	if ttl <= 0 {
 		ttl = p.defaultTTL
 	}
-	
+
 	// Create cache entry from response (this could be optimized further)
 	entry := &CacheEntry{
 		StatusCode: resp.StatusCode,
 		Header:     resp.Header.Clone(),
 	}
-	
+
 	p.cache.Set(key, entry, ttl)
 }
 
