@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"sync"
 	"time"
+
+	internalbackoff "github.com/ambiyansyah-risyal/klayengo/internal/backoff"
 )
 
 // RetryCondition returns true if the operation should be retried.
@@ -278,6 +280,7 @@ type DefaultRetryPolicy struct {
 	backoffMultiplier float64
 	jitter            float64
 	backoffStrategy   BackoffStrategy
+	backoffCalculator *internalbackoff.Calculator
 	isIdempotent      func(method string) bool
 }
 
@@ -302,5 +305,3 @@ func (bs BackoffStrategy) String() string {
 		return "Unknown"
 	}
 }
-
-

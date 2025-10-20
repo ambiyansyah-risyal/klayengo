@@ -482,8 +482,8 @@ func TestIsTransient(t *testing.T) {
 			transient: false,
 		},
 		{
-			name: "wrapped sentinel error",
-			err:  fmt.Errorf("wrapped: %w", ErrRateLimited),
+			name:      "wrapped sentinel error",
+			err:       fmt.Errorf("wrapped: %w", ErrRateLimited),
 			transient: true,
 		},
 		{
@@ -509,26 +509,26 @@ func TestIsTransient(t *testing.T) {
 func TestErrorWrappingChain(t *testing.T) {
 	// Test that error wrapping preserves the root cause through multiple layers
 	rootCause := fmt.Errorf("connection refused")
-	
+
 	wrappedErr := &ClientError{
 		Type:    ErrorTypeNetwork,
 		Message: "network request failed",
 		Cause:   fmt.Errorf("network request failed: %w", rootCause),
 	}
-	
+
 	outerErr := fmt.Errorf("request failed: %w", wrappedErr)
-	
+
 	// Should be able to unwrap to ClientError
 	var clientErr *ClientError
 	if !errors.As(outerErr, &clientErr) {
 		t.Error("Should be able to extract ClientError from wrapped chain")
 	}
-	
+
 	// Should be able to find root cause
 	if !errors.Is(outerErr, rootCause) {
 		t.Error("Should be able to find root cause through wrapping chain")
 	}
-	
+
 	// Should preserve ClientError type matching
 	if !errors.Is(outerErr, &ClientError{Type: ErrorTypeNetwork}) {
 		t.Error("Should match ClientError type through wrapping chain")
@@ -540,38 +540,38 @@ func FuzzErrorWrapping(f *testing.F) {
 	f.Add("network error", "connection failed")
 	f.Add("timeout", "request timed out")
 	f.Add("server error", "internal server error")
-	
+
 	f.Fuzz(func(t *testing.T, errorType, message string) {
 		// Create a root cause error
 		rootCause := fmt.Errorf("root cause: %s", message)
-		
+
 		// Create a ClientError with wrapped root cause
 		clientErr := &ClientError{
 			Type:    errorType,
 			Message: message,
 			Cause:   fmt.Errorf("%s: %w", message, rootCause),
 		}
-		
+
 		// Wrap it multiple times
 		wrapped1 := fmt.Errorf("layer1: %w", clientErr)
 		wrapped2 := fmt.Errorf("layer2: %w", wrapped1)
 		wrapped3 := fmt.Errorf("layer3: %w", wrapped2)
-		
+
 		// Should always be able to extract the ClientError
 		var extractedErr *ClientError
 		if !errors.As(wrapped3, &extractedErr) {
 			t.Error("Should always be able to extract ClientError from wrapped chain")
 		}
-		
+
 		// Should preserve the original type and message
 		if extractedErr.Type != errorType {
 			t.Errorf("Error type not preserved: expected %s, got %s", errorType, extractedErr.Type)
 		}
-		
+
 		if extractedErr.Message != message {
 			t.Errorf("Error message not preserved: expected %s, got %s", message, extractedErr.Message)
 		}
-		
+
 		// Should be able to find root cause
 		if !errors.Is(wrapped3, rootCause) {
 			t.Error("Root cause should be findable through wrapping chain")

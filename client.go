@@ -9,43 +9,49 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	internalbackoff "github.com/ambiyansyah-risyal/klayengo/internal/backoff"
+	internalsingleflight "github.com/ambiyansyah-risyal/klayengo/internal/singleflight"
 )
 
 // Client is a resilient HTTP client that layers retries, circuit breaking,
 // rate limiting, caching, de‑duplication, middleware and metrics around
 // the standard net/http Client. It is safe for concurrent use.
 type Client struct {
-	httpClient        *http.Client
-	maxRetries        int
-	initialBackoff    time.Duration
-	maxBackoff        time.Duration
-	backoffMultiplier float64
-	jitter            float64
-	backoffStrategy   BackoffStrategy
-	timeout           time.Duration
-	retryCondition    RetryCondition
-	retryPolicy       RetryPolicy
-	retryBudget       *RetryBudget
-	circuitBreaker    *CircuitBreaker
-	middleware        []Middleware
-	rateLimiter       *RateLimiter
-	limiterRegistry   *RateLimiterRegistry
-	limiterKeyFunc    KeyFunc
-	cache             Cache
-	cacheTTL          time.Duration
-	cacheKeyFunc      func(*http.Request) string
-	cacheCondition    CacheCondition
-	cacheProvider     CacheProvider
-	cacheMode         CacheMode
-	singleFlight      map[string]*singleFlightEntry
-	singleFlightMu    sync.RWMutex
-	metrics           *MetricsCollector
-	debug             *DebugConfig
-	logger            Logger
-	deduplication     *DeduplicationTracker
-	dedupKeyFunc      DeduplicationKeyFunc
-	dedupCondition    DeduplicationCondition
-	validationError   error
+	httpClient          *http.Client
+	maxRetries          int
+	initialBackoff      time.Duration
+	maxBackoff          time.Duration
+	backoffMultiplier   float64
+	jitter              float64
+	backoffStrategy     BackoffStrategy
+	backoffCalculator   *internalbackoff.Calculator
+	timeout             time.Duration
+	retryCondition      RetryCondition
+	retryPolicy         RetryPolicy
+	retryBudget         *RetryBudget
+	circuitBreaker      *CircuitBreaker
+	middleware          []Middleware
+	rateLimiter         *RateLimiter
+	limiterRegistry     *RateLimiterRegistry
+	limiterKeyFunc      KeyFunc
+	cache               Cache
+	cacheTTL            time.Duration
+	cacheKeyFunc        func(*http.Request) string
+	cacheCondition      CacheCondition
+	cacheProvider       CacheProvider
+	cacheMode           CacheMode
+	singleFlight        map[string]*singleFlightEntry
+	singleFlightMu      sync.RWMutex
+	singleFlightGroup   *internalsingleflight.Group
+	singleFlightEnabled bool
+	metrics             *MetricsCollector
+	debug               *DebugConfig
+	logger              Logger
+	deduplication       *DeduplicationTracker
+	dedupKeyFunc        DeduplicationKeyFunc
+	dedupCondition      DeduplicationCondition
+	validationError     error
 }
 
 // New constructs a Client using the provided functional options. A best effort
@@ -85,15 +91,38 @@ func New(options ...Option) *Client {
 		dedupCondition:    DefaultDeduplicationCondition,
 	}
 
+	// Initialize backoff calculator based on default strategy
+	client.backoffCalculator = internalbackoff.GetExponentialJitterCalculator()
+
+	// Initialize singleflight group (disabled by default until cache SWR implementation)
+	client.singleFlightGroup = internalsingleflight.New()
+	client.singleFlightEnabled = false
+
 	for _, option := range options {
 		option(client)
 	}
+
+	// Update backoff calculator based on final strategy after options are applied
+	client.updateBackoffCalculator()
 
 	if err := client.ValidateConfiguration(); err != nil {
 		client.validationError = err
 	}
 
 	return client
+}
+
+// updateBackoffCalculator updates the internal backoff calculator based on the current strategy.
+func (c *Client) updateBackoffCalculator() {
+	switch c.backoffStrategy {
+	case ExponentialJitter:
+		c.backoffCalculator = internalbackoff.GetExponentialJitterCalculator()
+	case DecorrelatedJitter:
+		c.backoffCalculator = internalbackoff.GetDecorrelatedJitterCalculator()
+	default:
+		// Fallback to exponential jitter for unknown strategies
+		c.backoffCalculator = internalbackoff.GetExponentialJitterCalculator()
+	}
 }
 
 // Get performs an HTTP GET with context.
@@ -464,15 +493,18 @@ func (c *Client) executeMiddleware(req *http.Request) (*http.Response, error) {
 }
 
 func (c *Client) calculateBackoff(attempt int) time.Duration {
-	switch c.backoffStrategy {
-	case ExponentialJitter:
-		return c.calculateExponentialBackoff(attempt)
-	case DecorrelatedJitter:
-		return c.calculateDecorrelatedBackoff(attempt)
-	default:
-		// Fallback to exponential jitter for unknown strategies
-		return c.calculateExponentialBackoff(attempt)
+	if c.backoffCalculator == nil {
+		// Fallback to direct calculation if calculator is not initialized
+		switch c.backoffStrategy {
+		case ExponentialJitter:
+			return c.calculateExponentialBackoff(attempt)
+		case DecorrelatedJitter:
+			return c.calculateDecorrelatedBackoff(attempt)
+		default:
+			return c.calculateExponentialBackoff(attempt)
+		}
 	}
+	return c.backoffCalculator.Calculate(attempt, c.initialBackoff, c.maxBackoff, c.backoffMultiplier, c.jitter)
 }
 
 func (c *Client) calculateExponentialBackoff(attempt int) time.Duration {
@@ -485,7 +517,7 @@ func (c *Client) calculateExponentialBackoff(attempt int) time.Duration {
 		attempt = 30
 	}
 
-	backoff := time.Duration(float64(c.initialBackoff) * pow(c.backoffMultiplier, attempt))
+	backoff := time.Duration(float64(c.initialBackoff) * internalbackoff.Pow(c.backoffMultiplier, attempt))
 	if backoff < 0 || backoff > c.maxBackoff {
 		backoff = c.maxBackoff
 	}
@@ -527,7 +559,7 @@ func (c *Client) calculateDecorrelatedBackoff(attempt int) time.Duration {
 	// random_between(base, min(cap, base * 3^attempt))
 
 	base := float64(c.initialBackoff)
-	factor := pow(3.0, attempt) // Use 3x multiplier for decorrelated jitter
+	factor := internalbackoff.Pow(3.0, attempt) // Use 3x multiplier for decorrelated jitter
 	upper := base * factor
 
 	// Prevent overflow and respect maxBackoff
@@ -549,14 +581,6 @@ func (c *Client) calculateDecorrelatedBackoff(attempt int) time.Duration {
 		result = c.maxBackoff
 	}
 
-	return result
-}
-
-func pow(base float64, exponent int) float64 {
-	result := 1.0
-	for i := 0; i < exponent; i++ {
-		result *= base
-	}
 	return result
 }
 
@@ -636,6 +660,18 @@ func getEndpointFromRequest(req *http.Request) string {
 
 // singleFlightDo executes a request with single-flight protection to prevent stampede.
 func (c *Client) singleFlightDo(key string, fn func() (*http.Response, error)) (*http.Response, error) {
+	// Use internal singleflight group if enabled, otherwise fallback to legacy implementation
+	if c.singleFlightEnabled && c.singleFlightGroup != nil {
+		val, err := c.singleFlightGroup.Do(key, func() (interface{}, error) {
+			return fn()
+		})
+		if resp, ok := val.(*http.Response); ok {
+			return resp, err
+		}
+		return nil, err
+	}
+
+	// Legacy implementation for backward compatibility
 	c.singleFlightMu.Lock()
 	if entry, exists := c.singleFlight[key]; exists {
 		c.singleFlightMu.Unlock()
