@@ -1,0 +1,168 @@
+#!/bin/bash
+
+# Optimized commit message validation hook
+# Performance improvements:
+# - Pre-compiled regex patterns using built-in bash features
+# - Early exit optimizations
+# - Reduced string allocations
+# - Cached pattern matching
+
+set -e
+
+# Configuration
+COMMIT_MSG_FILE="$1"
+if [ -z "${COMMIT_MSG_FILE}" ]; then
+    echo "❌ Error: No commit message file provided"
+    exit 1
+fi
+
+# Performance: Read file once and cache
+if [ ! -f "${COMMIT_MSG_FILE}" ]; then
+    echo "❌ Error: Commit message file not found: ${COMMIT_MSG_FILE}"
+    exit 1
+fi
+
+COMMIT_MSG=$(cat "${COMMIT_MSG_FILE}")
+
+# Early exit: Check if message is empty (fastest check first)
+if [ -z "${COMMIT_MSG}" ]; then
+    echo "❌ Empty commit message. Please provide a descriptive message."
+    exit 1
+fi
+
+# Performance: Extract first line only once
+FIRST_LINE=$(echo "${COMMIT_MSG}" | head -n 1)
+
+# Early exit: Quick length check (avoid processing very long messages)
+if [ ${#FIRST_LINE} -gt 200 ]; then
+    echo "❌ Commit message too long (${#FIRST_LINE} chars). Keep first line under 200 characters."
+    echo "Current message: ${FIRST_LINE:0:100}..."
+    exit 1
+fi
+
+# Optimized: Check single line constraint using efficient line counting
+TOTAL_LINES=$(echo "${COMMIT_MSG}" | wc -l)
+NON_COMMENT_LINES=$(echo "${COMMIT_MSG}" | grep -v '^#' | grep -v '^$' | wc -l)
+
+if [ "${NON_COMMENT_LINES}" -gt 1 ]; then
+    echo "❌ Commit message should be a single line (excluding comments)."
+    echo "Found ${NON_COMMENT_LINES} non-comment lines out of ${TOTAL_LINES} total lines."
+    echo ""
+    echo "Current message:"
+    echo "${COMMIT_MSG}"
+    exit 1
+fi
+
+# Pre-compiled patterns for better performance
+# Using bash's built-in pattern matching instead of external grep when possible
+
+# Optimized conventional commit validation
+# Pattern breakdown for readability and maintenance:
+#   ^(type)(\(scope\))?: description
+VALID_TYPES="build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test|wip"
+
+# Fast type extraction using parameter expansion
+if [[ "${FIRST_LINE}" =~ ^([^:([:space:]]+)(\([^)]*\))?: ]]; then
+    COMMIT_TYPE="${BASH_REMATCH[1]}"
+    HAS_SCOPE="${BASH_REMATCH[2]}"
+else
+    echo "❌ Commit message must follow conventional commits format: <type>(optional scope): <description>"
+    echo ""
+    echo "Valid types: ${VALID_TYPES}"
+    echo "Examples:"
+    echo "  feat: add new feature"
+    echo "  fix: resolve issue with rate limiter"
+    echo "  docs: update README"
+    echo "  perf: optimize circuit breaker performance"
+    echo ""
+    echo "Current message: ${FIRST_LINE}"
+    exit 1
+fi
+
+# Optimized type validation using case statement (faster than regex)
+case "${COMMIT_TYPE}" in
+    build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test|wip)
+        # Valid type
+        ;;
+    *)
+        echo "❌ Invalid commit type: '${COMMIT_TYPE}'"
+        echo ""
+        echo "Valid types: ${VALID_TYPES}"
+        echo "Current message: ${FIRST_LINE}"
+        exit 1
+        ;;
+esac
+
+# Optimized: Extract description part for additional validation
+if [[ "${FIRST_LINE}" =~ ^[^:]+:[[:space:]]*(.+) ]]; then
+    DESCRIPTION="${BASH_REMATCH[1]}"
+else
+    echo "❌ Commit message missing description after ':'"
+    echo "Format: <type>(scope): <description>"
+    echo "Current message: ${FIRST_LINE}"
+    exit 1
+fi
+
+# Quick description validation
+if [ ${#DESCRIPTION} -lt 3 ]; then
+    echo "❌ Commit description too short (${#DESCRIPTION} chars). Minimum 3 characters required."
+    echo "Current message: ${FIRST_LINE}"
+    exit 1
+fi
+
+# Optimized AI keyword detection using case-insensitive bash pattern matching
+# Convert to lowercase once for all checks
+DESCRIPTION_LOWER=$(echo "${DESCRIPTION}" | tr '[:upper:]' '[:lower:]')
+
+# Pre-defined AI keywords for fast lookup
+AI_KEYWORDS_ARRAY=(
+    "codex" "copilot" "claude" "qwen" "chatgpt" "gpt" "openai" "anthropic"
+    "ai" "artificial intelligence" "machine learning" "ml"
+)
+
+# Optimized keyword checking with early exit
+for keyword in "${AI_KEYWORDS_ARRAY[@]}"; do
+    if [[ "${DESCRIPTION_LOWER}" == *"${keyword}"* ]]; then
+        echo "❌ Commit message contains AI-related keyword: '${keyword}'"
+        echo ""
+        echo "Prohibited keywords: ${AI_KEYWORDS_ARRAY[*]}"
+        echo "Current message: ${FIRST_LINE}"
+        exit 1
+    fi
+done
+
+# Optional: Check for common formatting issues (fast checks)
+# Leading/trailing whitespace in description
+if [[ "${DESCRIPTION}" =~ ^[[:space:]] ]] || [[ "${DESCRIPTION}" =~ [[:space:]]$ ]]; then
+    echo "⚠️  Warning: Description has leading or trailing whitespace"
+fi
+
+# Check for uppercase start (conventional commits should start lowercase)
+if [[ "${DESCRIPTION}" =~ ^[A-Z] ]]; then
+    echo "⚠️  Warning: Description should start with lowercase letter"
+    echo "   Consider: ${COMMIT_TYPE}${HAS_SCOPE}: $(echo "${DESCRIPTION:0:1}" | tr '[:upper:]' '[:lower:]')${DESCRIPTION:1}"
+fi
+
+# Check for period at end (conventional commits typically don't end with periods)
+if [[ "${DESCRIPTION}" == *. ]]; then
+    echo "⚠️  Warning: Description ends with period (not required for conventional commits)"
+fi
+
+# Performance summary for development
+if [[ "${KLAYENGO_DEBUG_HOOKS}" == "true" ]]; then
+    echo "🔧 Debug: Hook performance info:"
+    echo "   - Message length: ${#FIRST_LINE} characters"
+    echo "   - Type: ${COMMIT_TYPE}"
+    echo "   - Has scope: ${HAS_SCOPE:+yes}"
+    echo "   - Description: ${#DESCRIPTION} characters"
+fi
+
+# Success output with performance info
+echo "✅ Commit message is valid: ${FIRST_LINE}"
+
+# Optional: Suggest improvements
+if [ ${#FIRST_LINE} -gt 72 ]; then
+    echo "💡 Tip: Consider shortening the message (currently ${#FIRST_LINE} chars, recommended: ≤72)"
+fi
+
+exit 0
