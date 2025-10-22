@@ -2,6 +2,7 @@ package klayengo
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"sync"
@@ -305,3 +306,25 @@ func (bs BackoffStrategy) String() string {
 		return "Unknown"
 	}
 }
+
+// TypedResponse represents a response with unmarshaled typed content.
+type TypedResponse struct {
+	*http.Response
+	Data interface{}
+}
+
+// ResponseUnmarshaler defines an interface for unmarshaling response bodies.
+type ResponseUnmarshaler interface {
+	Unmarshal(data []byte, v interface{}) error
+}
+
+// JSONUnmarshaler implements ResponseUnmarshaler for JSON content.
+type JSONUnmarshaler struct{}
+
+// Unmarshal unmarshals JSON data into the provided interface.
+func (u *JSONUnmarshaler) Unmarshal(data []byte, v interface{}) error {
+	return json.Unmarshal(data, v)
+}
+
+// DefaultUnmarshaler is the default response unmarshaler (JSON).
+var DefaultUnmarshaler ResponseUnmarshaler = &JSONUnmarshaler{}

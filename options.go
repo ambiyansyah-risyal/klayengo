@@ -262,6 +262,13 @@ func WithDeduplicationCondition(fn DeduplicationCondition) Option {
 	}
 }
 
+// WithUnmarshaler sets a custom response unmarshaler for typed response methods.
+func WithUnmarshaler(unmarshaler ResponseUnmarshaler) Option {
+	return func(c *Client) {
+		c.unmarshaler = unmarshaler
+	}
+}
+
 // ValidateConfiguration performs shallow validation returning aggregated error.
 func (c *Client) ValidateConfiguration() error {
 	var errors []string
@@ -277,6 +284,7 @@ func (c *Client) ValidateConfiguration() error {
 	errors = append(errors, c.validateDeduplicationConfig()...)
 	errors = append(errors, c.validateMiddlewareConfig()...)
 	errors = append(errors, c.validateHTTPClientConfig()...)
+	errors = append(errors, c.validateUnmarshalerConfig()...)
 	errors = append(errors, c.validateOptionCombinations()...)
 	errors = append(errors, c.validateExtremeValues()...)
 
@@ -425,6 +433,16 @@ func (c *Client) validateHTTPClientConfig() []string {
 
 	if c.httpClient == nil {
 		errors = append(errors, "HTTP client cannot be nil")
+	}
+
+	return errors
+}
+
+func (c *Client) validateUnmarshalerConfig() []string {
+	var errors []string
+
+	if c.unmarshaler == nil {
+		errors = append(errors, "unmarshaler cannot be nil")
 	}
 
 	return errors

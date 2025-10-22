@@ -2,6 +2,7 @@ package klayengo
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"math/rand"
@@ -51,6 +52,7 @@ type Client struct {
 	deduplication       *DeduplicationTracker
 	dedupKeyFunc        DeduplicationKeyFunc
 	dedupCondition      DeduplicationCondition
+	unmarshaler         ResponseUnmarshaler
 	validationError     error
 }
 
@@ -89,6 +91,7 @@ func New(options ...Option) *Client {
 		deduplication:     nil,
 		dedupKeyFunc:      DefaultDeduplicationKeyFunc,
 		dedupCondition:    DefaultDeduplicationCondition,
+		unmarshaler:       DefaultUnmarshaler,
 	}
 
 	// Initialize backoff calculator based on default strategy
@@ -142,6 +145,110 @@ func (c *Client) Post(ctx context.Context, url, contentType string, body io.Read
 	}
 	req.Header.Set("Content-Type", contentType)
 	return c.Do(req)
+}
+
+// GetJSON performs an HTTP GET and unmarshals the response into the provided type T.
+func (c *Client) GetJSON(ctx context.Context, url string, target interface{}) error {
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return err
+	}
+	return c.DoJSON(req, target)
+}
+
+// PostJSON performs an HTTP POST with JSON body and unmarshals the response into the provided type T.
+func (c *Client) PostJSON(ctx context.Context, url string, requestBody interface{}, target interface{}) error {
+	var body io.Reader
+	if requestBody != nil {
+		jsonData, err := json.Marshal(requestBody)
+		if err != nil {
+			return fmt.Errorf("failed to marshal request body: %w", err)
+		}
+		body = strings.NewReader(string(jsonData))
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", url, body)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	return c.DoJSON(req, target)
+}
+
+// GetTyped performs an HTTP GET and returns a TypedResponse with unmarshaled data.
+func (c *Client) GetTyped(ctx context.Context, url string, target interface{}) (*TypedResponse, error) {
+	resp, err := c.Get(ctx, url)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := c.unmarshalResponse(resp, target); err != nil {
+		return nil, err
+	}
+
+	return &TypedResponse{
+		Response: resp,
+		Data:     target,
+	}, nil
+}
+
+// PostTyped performs an HTTP POST with JSON body and returns a TypedResponse with unmarshaled data.
+func (c *Client) PostTyped(ctx context.Context, url string, requestBody interface{}, target interface{}) (*TypedResponse, error) {
+	var body io.Reader
+	if requestBody != nil {
+		jsonData, err := json.Marshal(requestBody)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal request body: %w", err)
+		}
+		body = strings.NewReader(string(jsonData))
+	}
+
+	resp, err := c.Post(ctx, url, "application/json", body)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := c.unmarshalResponse(resp, target); err != nil {
+		return nil, err
+	}
+
+	return &TypedResponse{
+		Response: resp,
+		Data:     target,
+	}, nil
+}
+
+// DoJSON executes a prepared *http.Request and unmarshals the response into target.
+func (c *Client) DoJSON(req *http.Request, target interface{}) error {
+	resp, err := c.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	return c.unmarshalResponse(resp, target)
+}
+
+// unmarshalResponse reads the response body and unmarshals it into the target.
+func (c *Client) unmarshalResponse(resp *http.Response, target interface{}) error {
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	if resp.StatusCode >= 400 {
+		return fmt.Errorf("HTTP error %d: %s", resp.StatusCode, string(body))
+	}
+
+	if len(body) == 0 {
+		return nil // Empty response, nothing to unmarshal
+	}
+
+	if err := c.unmarshaler.Unmarshal(body, target); err != nil {
+		return fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	return nil
 }
 
 // Do executes a prepared *http.Request applying all reliability features.
