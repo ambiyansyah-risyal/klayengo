@@ -16,6 +16,7 @@
 - 🔧 **Middleware** - Extensible request/response interceptors
 - 🐛 **Debug & Logging** - Comprehensive observability
 - ⚙️ **Configuration Validation** - Runtime validation of client settings
+- 🎯 **Typed Responses** - Automatic JSON unmarshaling into struct types with compile-time type safety
 
 ## 📦 Installation
 
@@ -36,6 +37,12 @@ import (
     "github.com/ambiyansyah-risyal/klayengo"
 )
 
+type User struct {
+    ID   int    `json:"id"`
+    Name string `json:"name"`
+    Email string `json:"email"`
+}
+
 func main() {
     client := klayengo.New(
         klayengo.WithMaxRetries(3),
@@ -48,15 +55,79 @@ func main() {
         klayengo.WithDeduplication(),
     )
 
-    resp, err := client.Get(context.Background(), "https://api.example.com/data")
+    // Traditional approach - manual JSON handling
+    resp, err := client.Get(context.Background(), "https://api.example.com/users/1")
     if err != nil {
         log.Fatal(err)
     }
     defer resp.Body.Close()
+    
+    // New typed approach - automatic JSON unmarshaling
+    var user User
+    err = client.GetJSON(context.Background(), "https://api.example.com/users/1", &user)
+    if err != nil {
+        log.Fatal(err)
+    }
+    log.Printf("User: %+v", user)
 }
 ```
 
 ## 📖 Examples
+
+### Typed Responses (New!)
+
+klayengo now supports automatic JSON unmarshaling into struct types, eliminating the need for manual JSON parsing:
+
+```go
+type User struct {
+    ID       int    `json:"id"`
+    Name     string `json:"name"`
+    Email    string `json:"email"`
+    Username string `json:"username"`
+}
+
+type CreateUserRequest struct {
+    Name  string `json:"name"`
+    Email string `json:"email"`
+}
+
+client := klayengo.New(
+    klayengo.WithMaxRetries(3),
+    klayengo.WithRateLimiter(10, time.Second),
+    klayengo.WithCache(5*time.Minute),
+)
+
+// GET with automatic JSON unmarshaling
+var user User
+err := client.GetJSON(ctx, "https://api.example.com/users/1", &user)
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Printf("User: %+v", user)
+
+// POST with JSON request/response
+request := CreateUserRequest{Name: "John", Email: "john@example.com"}
+var newUser User
+err = client.PostJSON(ctx, "https://api.example.com/users", request, &newUser)
+if err != nil {
+    log.Fatal(err)
+}
+
+// Get both HTTP response metadata AND typed data
+var users []User
+typedResp, err := client.GetTyped(ctx, "https://api.example.com/users", &users)
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Printf("Status: %d, Users: %+v", typedResp.StatusCode, users)
+```
+
+**Benefits:**
+- ✅ **Type Safety** - Compile-time type checking prevents runtime errors
+- ✅ **No Manual Parsing** - Automatic JSON unmarshaling
+- ✅ **Same Resilience** - All retry, caching, circuit breaker features work seamlessly
+- ✅ **Backward Compatible** - Traditional `Get()`, `Post()`, `Do()` methods still work
+- ✅ **Custom Unmarshalers** - Support for XML, Protocol Buffers, or custom formats
 
 ### Basic Usage with All Features
 
@@ -526,6 +597,7 @@ go run main.go
 | `WithMetrics()` | Prometheus metrics | Disabled |
 | `WithMiddleware(...)` | Custom middleware | None |
 | `WithDebug()` | Debug logging | Disabled |
+| `WithUnmarshaler(unmarshaler)` | Custom response unmarshaler for typed responses | JSON |
 
 ## 🤝 Contributing
 
